@@ -13,6 +13,10 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[16] 2026-11-15
+- Widescreen: the results screen at the end of each stage is no longer cut in two and missing text (a regression from the previous update)
+- Menus: the game no longer draws the 3D scene hidden behind them, so the GPU (and its fans) stay quiet in the main menu
+
 [15] 2026-11-14
 - Hoth base: with MOTION: SMOOTH, the capes of fallen snowtroopers no longer stretch across the screen
 - Widescreen: the HUD no longer jumps back to 4:3 when you get hit or a SUCCESS counter appears in duels
