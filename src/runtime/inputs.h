@@ -74,6 +74,7 @@ extern std::atomic<float> g_sight_scale;   // Star Wars Trilogy: the game's sigh
 extern std::atomic<bool> g_swt_duel;   // Star Wars Trilogy: a lightsaber duel (top state 10..13): the lever turned round
 extern std::atomic<int> g_duel_invert;   // OPTIONS > CONTROLS > INVERT IN DUELS: 0 off, 1 x, 2 y, 3 both (the duels only)
 extern std::atomic<int> g_swt_top_state;   // Star Wars Trilogy: the top state (0x2210E8) while playing, -1 otherwise
+extern std::atomic<int> g_swt_phase_results;   // Star Wars Trilogy: how many phase results screens have begun (stats.cpp)
 struct PlayerAim { float x, y; bool inside; };
 PlayerAim player_aim(int player);
 // Star Wars Trilogy: how far the lever's exact position (axis 0 = x, 1 = y)

@@ -16,8 +16,10 @@ public:
     void hide() { visible_ = false; }
     bool visible() const { return visible_; }
 
-    // After the main renderer: blends the picture over the swapchain image
-    void record(VkCommandBuffer cmd, VkImageView target, VkExtent2D extent);
+    // After the main renderer: blends the picture over the swapchain image.
+    // clear: nothing was drawn there before (the menus' opaque backdrop with
+    // no 3D image behind it): the image is cleared to black first
+    void record(VkCommandBuffer cmd, VkImageView target, VkExtent2D extent, bool clear = false);
 
 private:
     void destroy_image();

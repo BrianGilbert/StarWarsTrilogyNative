@@ -407,7 +407,10 @@ void stats_frame() {
 void stats_enter(Ctx& c, uint32_t fn) {
     if (!g.on) return;
     for (uint32_t f : FN_RESULTS)
-        if (fn == f) g.phase_end(int(c.r[3]));
+        if (fn == f) {
+            g_swt_phase_results++;   // the widescreen HUD lets go for the results screen (app.cpp)
+            g.phase_end(int(c.r[3]));
+        }
 }
 
 void stats_game_cheated() {

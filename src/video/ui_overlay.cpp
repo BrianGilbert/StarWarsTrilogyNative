@@ -118,8 +118,8 @@ void UiOverlay::destroy_image() {
     w_ = h_ = 0;
 }
 
-void UiOverlay::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D extent) {
-    if (!visible_ || !pipeline_) return;
+void UiOverlay::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D extent, bool clear) {
+    if (!pipeline_ || (!visible_ && !clear)) return;
     if (dirty_) {
         size_t bytes = pending_.size() * 4;
         if (pending_w_ != w_ || pending_h_ != h_ || bytes > staging_size_) {
@@ -187,19 +187,25 @@ void UiOverlay::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D exten
         vk_image_barrier(cmd, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         dirty_ = false;
     }
-    if (!image_) return;
+    const bool draw = visible_ && image_;
+    if (!draw && !clear) return;
 
     VkRenderingAttachmentInfo ta{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     ta.imageView = target;
     ta.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    ta.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    ta.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
     ta.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    ta.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     VkRenderingInfo ri{VK_STRUCTURE_TYPE_RENDERING_INFO};
     ri.renderArea = {{0, 0}, extent};
     ri.layerCount = 1;
     ri.colorAttachmentCount = 1;
     ri.pColorAttachments = &ta;
     vkCmdBeginRendering(cmd, &ri);
+    if (!draw) {   // no picture yet: the clear only
+        vkCmdEndRendering(cmd);
+        return;
+    }
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set_, 0, nullptr);
     VkViewport full{0, 0, float(extent.width), float(extent.height), 0, 1};
