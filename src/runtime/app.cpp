@@ -1372,9 +1372,13 @@ int main(int argc, char** argv) {
             snprintf(path, sizeof(path), "out/film_out/%04zu.bmp", film_pos);
             presenter.capture_next(path);
         }
+        // The menus' own backdrop (not the pause menu over the game) covers the
+        // whole window: the 3D image under it is not drawn. It was, at the
+        // monitor's refresh rate with every effect on, for nobody to see (issue #90)
+        const bool menu_covers = frontend.active() && !frontend.over_game() && ui.visible();
         presenter.frame([&](VkCommandBuffer cmd, VkImageView view, VkExtent2D extent) {
-            renderer.record(cmd, view, extent);
-            ui.record(cmd, view, extent);
+            if (!menu_covers) renderer.record(cmd, view, extent);
+            ui.record(cmd, view, extent, menu_covers);
             if (toast_shown) toast_layer.record(cmd, view, extent);   // over the menus too: their backdrop is opaque
         });
         if (g_frame_log) {
