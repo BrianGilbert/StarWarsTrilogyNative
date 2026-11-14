@@ -620,6 +620,9 @@ int main(int argc, char** argv) {
     int hud_stage = -1;
     bool hud_held = false, hud_held_once = false;
     int hud_frames = 0;
+    // ... the phase results screens seen, and how many 2D frames in a row the
+    // top band has not looked like a HUD while it was held
+    int hud_results = 0, hud_misses = 0;
     // Composes the 2D layers of a vblank (out.frame, its layer memory in
     // out.vram) for the renderer. One composition at a time (prep_mutex): the
     // 2D packs and the back layers' scroll keep state between them
@@ -688,17 +691,23 @@ int main(int argc, char** argv) {
         // SUCCESS / FAILURE after a duel, and those frames must not send the
         // whole HUD back to 4:3 (issues #57, #82). Text in the top band's
         // centre (a briefing in the middle of a phase; the HUD leaves it
-        // empty) lets it go; it comes back after half a second of HUD
+        // empty) lets it go, and so do the phase's results screen and a top
+        // band that has not looked like a HUD for a second and a half: the
+        // results' text is all over the 4:3 screen, and moving it with the
+        // HUD tore it apart (issue #90). It comes back after half a second of HUD
         const int stage = g_swt_top_state;
-        if (stage != hud_stage) hud_stage = stage, hud_held = hud_held_once = false, hud_frames = 0;
+        const int results = g_swt_phase_results;
+        if (stage != hud_stage) hud_stage = stage, hud_held = hud_held_once = false, hud_frames = hud_misses = 0;
+        if (results != hud_results) hud_results = results, hud_held = false, hud_frames = hud_misses = 0;
         if (stage >= 0) {
             if (lit(303, 318) >= 8) {
-                hud_held = false, hud_frames = 0;
+                hud_held = false, hud_frames = hud_misses = 0;
             } else if (out.hud_band) {
-                hud_frames++;
+                hud_frames++, hud_misses = 0;
                 if (!hud_held_once || hud_frames >= 30) hud_held = hud_held_once = true;
             } else {
                 hud_frames = 0;
+                if (hud_held && ++hud_misses >= 90) hud_held = false, hud_misses = 0;
             }
             out.hud_band = hud_held;
         }
