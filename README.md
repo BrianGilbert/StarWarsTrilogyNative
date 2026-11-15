@@ -1,4 +1,4 @@
-<h1 align="center">Arcade flight shooter, native on PC</h1>
+<h1 align="center">Nico Starfighter</h1>
 
 <p align="center">
   <b>An unofficial, fan-made recompilation of the 1998 arcade game Star Wars Trilogy Arcade.</b><br>
