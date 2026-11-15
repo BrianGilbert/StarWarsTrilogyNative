@@ -1,11 +1,14 @@
-<p align="center">
-  <img src="res/menu/logo.png" alt="Star Wars Trilogy Arcade" width="60%">
-</p>
+<h1 align="center">Nico SWT</h1>
 
 <p align="center">
-  <b>Sega's 1998 arcade game, running natively on PC and Mac.</b><br>
-  Not an emulator: the original code, recompiled to C++, with a modern Vulkan renderer.
+  <b>An unofficial, fan-made recompilation of the 1998 arcade game Star Wars Trilogy Arcade.</b><br>
+  Not an emulator: the original program, recompiled to C++ on your own PC from your own copy, with a modern Vulkan renderer.
 </p>
+
+> [!IMPORTANT]
+> **Unofficial fan project.** Not affiliated with, endorsed or sponsored by SEGA, Lucasfilm or Disney.
+> Nothing from the original game is in this repository: no ROM, no code, no music or voices. To play
+> you need your own copy of the arcade game (`swtrilgy.zip`), and the game is built from it on your PC.
 
 <p align="center">
   <a href="https://www.youtube.com/@snicolast"><img src="https://img.shields.io/badge/YouTube-@snicolast-red?logo=youtube&logoColor=white" alt="YouTube: snicolast"></a>
@@ -25,19 +28,19 @@
   - Lightsabers, lasers and explosions light what is around them; Vader's suit shines; Boba
     Fett's desert has wind ripples.
 - **Sharp and smooth**: MSAA or NVIDIA DLAA, HD text, and the 3D drawn between the game's frames at 120 / 144 Hz and above.
-- **Arcade sound**, Digital Sound Board music and voices included, with surround and headphone modes.
+- **Arcade sound**, with the Digital Sound Board's music and voices, and surround and headphone modes.
 - **Mouse, gamepad (gyro too), light gun or flight stick**, with aim assist and force feedback as rumble.
 - **Quality presets** from laptops to RTX cards, and **achievements and stats** in Records.
   The achievements are also written to `achievements/achievements.csv` for [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) (Editor, Spreadsheet Import).
 
 <table>
   <tr>
-    <td><img src="docs/img/menu.jpg" alt="Main menu"></td>
     <td><img src="docs/img/death_star.jpg" alt="TIE fighters locked on in front of the Death Star"></td>
+    <td><img src="docs/img/hoth.jpg" alt="Walkers on Hoth in true widescreen"></td>
   </tr>
   <tr>
-    <td><img src="docs/img/hoth.jpg" alt="Walkers on Hoth in true widescreen"></td>
     <td><img src="docs/img/endor.jpg" alt="Speeder bike chase on Endor"></td>
+    <td><img src="docs/img/yavin.jpg" alt="X-wings over the Death Star in Yavin"></td>
   </tr>
 </table>
 
@@ -123,5 +126,5 @@ port, a ROM, or anything made from one. I have never published any of them: ever
 game themselves from their own `swtrilgy.zip`. Any ready-to-play download you find elsewhere is
 not from me, breaks the license, and is at your own risk.
 
-<sub>A fan project for personal use, not affiliated with or endorsed by Sega or Lucasfilm.
+<sub>A fan project for personal use, not affiliated with or endorsed by SEGA, Lucasfilm or Disney.
 Star Wars is a trademark of Lucasfilm Ltd.</sub>
