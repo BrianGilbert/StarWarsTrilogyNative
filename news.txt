@@ -13,6 +13,9 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[19] 2026-11-17
+- Flight sticks such as the X56 HOTAS, and older gamepads that are not Xbox or PlayStation pads, are now detected when the game is installed with NicoLauncher
+
 [18] 2026-11-16
 - New main menu: the Nico SWT logo, smaller, with PLAY big at the top, as in The Lost World and Sega Rally 2
 - The description of the chosen entry now opens right under it
