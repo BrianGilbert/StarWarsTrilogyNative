@@ -1900,9 +1900,10 @@ std::vector<std::wstring> Frontend::wrap(Family f, int px, const std::wstring& s
     return lines;
 }
 
-// The logo, LOGO_H of the window high from LOGO_TOP, centred LOGO_FROM_RIGHT
-// (1080p pixels) from the right edge: above the menu's column
-constexpr float LOGO_TOP = 0.07f, LOGO_H = 0.34f, LOGO_FROM_RIGHT = 370;
+// The room for the logo: LOGO_H of the window high from LOGO_TOP, centred
+// LOGO_FROM_RIGHT (1080p pixels) from the right edge, above the menu's column.
+// The logo picture is at most LOGO_W wide in it, with the tagline under it
+constexpr float LOGO_TOP = 0.07f, LOGO_H = 0.34f, LOGO_FROM_RIGHT = 370, LOGO_W = 400;
 
 // The background picture covering the window, darker towards the right where
 // the menu goes and at the bottom, with the logo; blurred for the options
@@ -1971,8 +1972,29 @@ void Frontend::shade_backdrop() {
     hgrad(int(w_ * 0.66f), 0, w_, h_, 0x02040A, 0.0f, 0.5f);
     vgrad(0, int(h_ * 0.72f), w_, h_, 0x000000, 0.0f, 0.6f);
     if (logo_.w > 0) {
-        int lh = int(LOGO_H * h_), lw = lh * logo_.w / logo_.h;
-        sprite(logo_, int(w_ - LOGO_FROM_RIGHT * u_) - lw / 2, int(LOGO_TOP * h_), lw, lh);
+        // As in The Lost World: the logo picture, LOGO_W wide at most, and
+        // under it a thin blue rule and what this is, in three lines of pale
+        // typewriter capitals; all of it centred in the room above the column
+        auto U = [&](float v) { return int(v * u_ + 0.5f); };
+        static const wchar_t* const TAGLINE[] = {L"AN UNOFFICIAL, FAN-MADE RECOMPILATION", L"OF THE 1998 ARCADE GAME",
+                                                 L"STAR WARS TRILOGY ARCADE"};
+        const int lines = int(std::size(TAGLINE));
+        const int tag_px = U(20), tag_line = U(28), gap = U(14), rule_gap = U(14);
+        const int below = gap + rule_gap + lines * tag_line;
+        const int band0 = int(0.05f * h_), band1 = int((LOGO_TOP + LOGO_H) * h_) + U(36) - U(50);
+        int lw = U(LOGO_W), lh = lw * logo_.h / logo_.w;
+        const int max_h = band1 - band0 - below;   // a tall logo: as high as fits
+        if (lh > max_h && max_h > 0) lh = max_h, lw = lh * logo_.w / logo_.h;
+        const int cx = int(w_ - LOGO_FROM_RIGHT * u_);
+        int top = band0 + std::max(0, (band1 - band0 - (lh + below)) / 2);
+        sprite(logo_, cx - lw / 2, top, lw, lh);
+        int ty = top + lh + gap, rule_w = U(330);
+        fill(cx - rule_w / 2, ty, cx + rule_w / 2, ty + std::max(1, U(1.5f)), SABER, 0.7f);
+        ty += rule_gap;
+        for (const wchar_t* line : TAGLINE) {
+            text(MONO, tag_px, line, cx, ty, 1, {0xC8DCF0, 0xC8DCF0, 0, 0, 1, std::max(1, U(2))});
+            ty += tag_line;
+        }
     }
 }
 
