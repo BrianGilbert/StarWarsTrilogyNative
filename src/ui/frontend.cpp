@@ -2054,14 +2054,20 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
                  {0xE8D8B0, 0xC8B080, EDGE, U(2)});
     }
 
-    // The entries share what is left of the height, the description under them
+    // The entries share what is left of the height, the description under
+    // them. The main menu as The Lost World's and Sega Rally 2's: PLAY big,
+    // the rest smaller under it
     int n = int(list.size());
-    int spacing = std::clamp((h - U(230) - y0) / std::max(1, n), U(44), U(84));
-    int item_px = std::min(U(58), spacing * 72 / 100);
+    const int spacing_all = std::clamp((h - U(230) - y0) / std::max(1, n), U(44), U(84));
+    const int item_px_all = std::min(U(58), spacing_all * 72 / 100);
+    const bool hero_menu = screen_ == Screen::Main;
+    auto row_h = [&](int i) { return !hero_menu ? spacing_all : list[size_t(i)].id == PLAY ? U(104) : U(62); };
+    auto row_px = [&](int i) { return !hero_menu ? item_px_all : list[size_t(i)].id == PLAY ? U(92) : U(46); };
     int y = y0;
     for (int i = 0; i < n; i++) {
         const Item& it = list[i];
         bool sel = i == selected_;
+        const int spacing = row_h(i), item_px = row_px(i);
         if (sel) {   // lightsaber blue from the right edge, a bright blade along it
             float a = it.enabled ? 0.36f : 0.16f;
             hgrad(band0, y, band1, y + spacing, SABER, 0.0f, a);
@@ -2096,8 +2102,11 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
         } else {
             tw = text(display(), item_px, it.label, tx, ty, 2, st);
         }
+        const bool chevron = hero_menu && sel && it.enabled && tw > 0;   // as in The Lost World and Sega Rally 2
+        if (chevron) triangle(tx - tw - U(28), y + spacing / 2, U(22), +1, 0xFFE08A, 0.95f);
         if (!it.value.empty())   // e.g. COMING SOON
-            text(MONO, U(20), it.value, tx - tw - U(28), y + spacing / 2 - U(12), 2, {0x7FB0D8, 0x6090B8});
+            text(MONO, U(20), it.value, tx - tw - U(chevron ? 56.0f : 28.0f), y + spacing / 2 - U(12), 2,
+                 {0x7FB0D8, 0x6090B8});
         hit_.push_back({band0, y, band1, y + spacing});
         values_.push_back({-1, 0});
         y += spacing;
