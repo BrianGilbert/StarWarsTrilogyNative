@@ -13,6 +13,12 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[18] 2026-11-16
+- New main menu: the Nico SWT logo, smaller, with PLAY big at the top, as in The Lost World and Sega Rally 2
+- The description of the chosen entry now opens right under it
+- MORE RECOMPS is gone from the menu: get The Lost World and Sega Rally 2 from NicoLauncher (github.com/snicolast/NicoLauncher-Hub)
+- New yellow SWT icon for the game
+
 [17] 2026-11-15
 - Updating is more reliable: an update now always recompiles every file that changed, so it no longer fails to build when the game was updated more than once in a short time
 
