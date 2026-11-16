@@ -1367,6 +1367,26 @@ int Frontend::measure(Family f, int px, const std::wstring& s) {
     return mask(f, px, s, 0).text_w;
 }
 
+void Frontend::cap_rows(Family f, int px, int& top, int& bottom) {
+    auto it = caps_.find({int(f), px});
+    if (it == caps_.end()) {
+        int dy = 0, mpx = px;
+        if (f == JURASSIC) dy = int(px * 0.42f + 0.5f), mpx = int(px * 1.34f + 0.5f);   // as text() draws it
+        const Mask& m = mask(f, mpx, L"H", 0);
+        int t = -1, b = -1;
+        for (int j = 0; j < m.h; j++)
+            for (int i = 0; i < m.w; i++)
+                if (m.a[size_t(j) * m.w + i] > 96) {
+                    if (t < 0) t = j;
+                    b = j + 1;
+                    break;
+                }
+        if (t < 0) t = m.pad, b = m.pad + px * 2 / 3;   // nothing drawn: a guess
+        it = caps_.emplace(std::make_pair(int(f), px), std::make_pair(t - m.pad + dy, b - m.pad + dy)).first;
+    }
+    top = it->second.first, bottom = it->second.second;
+}
+
 // Draws text with its box's top at y; align 0 = left of x, 1 = centred, 2 = right
 int Frontend::text(Family f, int px, const std::wstring& s, int x, int y, int align, const Style& st) {
     if (f == JURASSIC) {   // same capital height and position as Saira at this size
@@ -1901,7 +1921,9 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
                          : sel       ? Style{GOLD_TOP, GOLD_BOTTOM, EDGE, U(2), 1, U(3)}
                          : debug_row ? Style{0xFF8A7A, 0xD8402E, EDGE, U(2), 0.95f, U(3)}
                                      : Style{PALE_TOP, PALE_BOTTOM, EDGE, U(2), 0.95f, U(3)};
-        int ty = y + spacing / 2 - item_px * 55 / 100;
+        int cap0, cap1;   // the capitals' ink centred in the row, and so in the ribbon and on the chevron
+        cap_rows(display(), item_px, cap0, cap1);
+        int ty = y + spacing / 2 - (cap0 + cap1) / 2;
         int tw = text(display(), item_px, it.label, tx, ty, 2, st);
         const bool chevron = hero_menu && sel && it.enabled && tw > 0;   // as in The Lost World and Sega Rally 2
         if (chevron) triangle(tx - tw - U(28), y + spacing / 2, U(22), +1, 0xFFE08A, 0.95f);

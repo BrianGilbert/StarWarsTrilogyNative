@@ -173,6 +173,9 @@ private:
 
     HFONT font(Family f, int px);
     const Mask& mask(Family f, int px, const std::wstring& text, int edge_px);
+    // The rows a capital's ink covers, from the y text() is given (as it draws
+    // that family at that size): to centre entries on their row whatever the font
+    void cap_rows(Family f, int px, int& top, int& bottom);
     int text(Family f, int px, const std::wstring& s, int x, int y, int align, const Style& st);
     int measure(Family f, int px, const std::wstring& s);
     void fill(int x0, int y0, int x1, int y1, uint32_t rgb, float alpha);
@@ -298,6 +301,7 @@ private:
     std::vector<std::vector<char>> font_data_;
     std::map<std::pair<int, int>, HFONT> fonts_;
     std::map<std::wstring, Mask> masks_;
+    std::map<std::pair<int, int>, std::pair<int, int>> caps_;   // cap_rows by (family, px)
     HDC dc_ = nullptr;
     bool jurassic_ = false;   // third_party/fonts/Jurassic_Park.ttf loaded
 
