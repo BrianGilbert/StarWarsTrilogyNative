@@ -109,6 +109,13 @@ endif()
 foreach(sub ${SDL_UNUSED})
     set(SDL_${sub} OFF CACHE BOOL "" FORCE)
 endforeach()
+# SDL looks for DirectInput only with its audio or video on (both off above).
+# MSVC gets it anyway (SDL presets its checks there); clang or GCC for Windows
+# (llvm-mingw: NicoLauncher's builds) did not, and without it the flight sticks
+# and pads that only speak DirectInput (X56 HOTAS...) were not seen (issue #102)
+if(WIN32 AND NOT MSVC)
+    set(HAVE_DINPUT_H 1 CACHE INTERNAL "Have include dinput.h")
+endif()
 swt_dep(SDL3)
 FetchContent_Declare(SDL3
     URL ${SDL3_URL}
