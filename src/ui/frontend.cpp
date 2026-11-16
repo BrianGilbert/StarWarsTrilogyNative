@@ -32,44 +32,10 @@ constexpr uint32_t HINT = 0x9DB8D8, FOOT = 0x6A7A90;
 constexpr uint32_t SABER = 0x2E9BFF, PANEL = 0x040914;
 constexpr uint32_t WHITE_TOP = 0xFFFFFF, WHITE_BOTTOM = 0xD8E6F6;   // the selected entry of the side menu
 
-constexpr const wchar_t* COFFEE_URL = L"https://buymeacoffee.com/snicolast8u";
-constexpr const wchar_t* COFFEE_LABEL = L"BUY ME A COFFEE";
-constexpr uint32_t COFFEE_INK = 0x0D0C22;   // their dark blue-black
-constexpr const wchar_t* COFFEE_HINT = L"Support the port: opens buymeacoffee.com in your browser";
-
 // UPDATE AVAILABLE: news.txt on the public repository's main branch (news.h)
 constexpr const wchar_t* NEWS_HOST = L"raw.githubusercontent.com";
 constexpr const wchar_t* NEWS_PATH = L"/snicolast/StarWarsTrilogyNative/main/news.txt";
 constexpr const wchar_t* GAME_URL = L"https://github.com/snicolast/StarWarsTrilogyNative";
-
-// MORE RECOMPS: snicolast's other ports, in the menu's order (the Ids in
-// Frontend::recomp_of). Each one is looked for where its settings key says,
-// else in one of `folders` next to this port's folder
-struct Recomp {
-    const wchar_t* name;          // the menu entry
-    const wchar_t* about;         // the start of its description
-    const wchar_t* url;           // its GitHub page
-    const wchar_t* exe;           // its .exe
-    const wchar_t* folders[4];    // its usual folder names
-    const wchar_t* backdrop;      // its art, under res/menu/
-    const wchar_t* logo;
-    const wchar_t* caption;       // under its logo
-    float logo_top;               // where its logo starts, of the window's height
-    float logo_w;                 // its logo at most this wide (1080p)
-};
-constexpr Recomp RECOMPS[] = {
-    {L"THE LOST WORLD", L"The Lost World: Jurassic Park, the 1997 SEGA arcade game, remastered for PC like this one. ",
-     L"https://github.com/snicolast/LostWorldNative", L"LostWorld.exe",
-     {L"LostWorldNative", L"LostWorldNative-dev", L"LostWorld", L"The Lost World"},
-     L"more/lost_world_background.jpg", L"more/lost_world_logo.png",
-     L"SEGA  \u00B7  1997  \u00B7  ARCADE LIGHT-GUN SHOOTER", 0.28f, 560},
-    // The car is on the left of its art: the logo goes above it
-    {L"SEGA RALLY 2", L"Sega Rally 2, the 1998 SEGA arcade rally game, remastered for PC like this one. ",
-     L"https://github.com/snicolast/SegaRally2Native", L"SegaRally2.exe",
-     {L"SegaRally2Native", L"SegaRally2Native-dev", L"SegaRally2", L"Sega Rally 2"},
-     L"more/sega_rally_2_background.jpg", L"more/sega_rally_2_logo.png",
-     L"SEGA  \u00B7  1998  \u00B7  ARCADE RALLY RACING", 0.05f, 460},
-};
 
 double now_seconds() {
     static LARGE_INTEGER freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f; }();
@@ -215,15 +181,6 @@ void FrontendSettings::load(const char* path) {
     if (!f) return;
     char line[512];
     while (fgets(line, sizeof(line), f)) {
-        bool lw = strncmp(line, "lost_world_path", 15) == 0, sr2 = strncmp(line, "sega_rally_2_path", 17) == 0;
-        if (lw || sr2) {   // a path: may have spaces
-            const char* v = strchr(line, '=');
-            std::string path = v ? v + 1 : "";
-            while (!path.empty() && strchr(" \t\r\n\"", path.front())) path.erase(0, 1);
-            while (!path.empty() && strchr(" \t\r\n\"", path.back())) path.pop_back();
-            (lw ? lost_world_path : sega_rally_2_path) = path;
-            continue;
-        }
         char key[64], value[64];
         if (sscanf(line, " %63[^= ] = %63s", key, value) != 2) continue;
         std::string k = key, v = value;
@@ -304,8 +261,6 @@ void FrontendSettings::save(const char* path) const {
     fprintf(f, "supersample = %d\n", supersample);
 #endif
     fprintf(f, "check_updates = %d\nnews_seen = %d\n", check_updates, news_seen);
-    if (!lost_world_path.empty()) fprintf(f, "lost_world_path = %s\n", lost_world_path.c_str());
-    if (!sega_rally_2_path.empty()) fprintf(f, "sega_rally_2_path = %s\n", sega_rally_2_path.c_str());
     fclose(f);
 }
 
@@ -356,10 +311,6 @@ bool Frontend::init(const std::string& font_dir) {
     load(L"logo.png", logo_);
     load(L"snicolast.png", credit_);
     if (!load(L"background.png", backdrop_)) load(L"background.jpg", backdrop_);
-    for (int r = 0; r < RECOMP_COUNT; r++) {
-        load(RECOMPS[r].backdrop, more_backdrop_[r]);
-        load(RECOMPS[r].logo, more_logo_[r]);
-    }
     return ok;
 }
 
@@ -497,7 +448,6 @@ std::vector<Frontend::Item> Frontend::items() const {
         std::vector<Item> list = {{PLAY, L"PLAY", L"", L"The original arcade game, or new ways to fly"},
                                   {RECORDS, L"RECORDS", L"", L"Achievements and statistics"},
                                   {OPTIONS, L"OPTIONS", L"", L"Display, sound and controls"},
-                                  {MORE_GAMES, L"MORE RECOMPS", L"", L"Other arcade games recompiled for PC by snicolast"},
                                   {QUIT, L"QUIT", L"", L"Close the game"}};
         // DEBUG is for testing only: shown while the port is being tested;
         // for the release kShowDebugMenu goes false (SWT_DEBUG_MENU still shows it)
@@ -512,23 +462,6 @@ std::vector<Frontend::Item> Frontend::items() const {
                              : L"The original arcade game.  Insert a coin with 5 and press 1, or BACK and START on a gamepad"},
                 {EXTRA, L"EXTRA MODES", L"", L"New game modes made for this port"},
                 {BACK, L"BACK", L"", L"Return to the main menu"}};
-    case Screen::More:
-    {
-        std::vector<Item> list;
-        for (Id id : {LOST_WORLD, SEGA_RALLY_2}) {
-            int r = recomp_of(id);
-            bool found = !more_exe_[r].empty();
-            list.push_back({id, RECOMPS[r].name, found ? L"INSTALLED" : L"FREE DOWNLOAD",
-                            std::wstring(RECOMPS[r].about) + (!found
-                                ? (pad_prompts ? L"Not found on this PC: A opens its page, where you can download it"
-                                               : L"Not found on this PC: ENTER opens its page, where you can download it")
-                                : (pad_prompts ? L"Found on this PC: A closes this game and starts it"
-                                               : L"Found on this PC: ENTER closes this game and starts it"))});
-        }
-        list.push_back({COFFEE, COFFEE_LABEL, L"", COFFEE_HINT});
-        list.push_back({BACK, L"BACK", L"", L"Return to the main menu"});
-        return list;
-    }
     case Screen::Extra:
         return {{DOGFIGHT, L"DOGFIGHT", L"COMING SOON", L"An X-wing against TIE fighters: random encounters and objectives", false},
                 {BACK, L"BACK", L"", L"Return to the mode select"}};
@@ -751,17 +684,6 @@ void Frontend::activate(const Item& it, int dir) {
     case DEBUG_STAGE: debug_stage_ = it.index; open(Screen::Debug); break;
     case DEBUG_PHASE: debug_choice = debug_stage_ * 4 + it.index; push(Action::StartDebug); break;
     case EXTRA: open(Screen::Extra); break;
-    case MORE_GAMES:
-        for (int r = 0; r < RECOMP_COUNT; r++) find_recomp(r);
-        open(Screen::More);
-        break;
-    case LOST_WORLD: case SEGA_RALLY_2: {
-        int r = recomp_of(it.id);
-        if (more_exe_[r].empty()) open_recomp_page(r);
-        else play_recomp(r);
-        break;
-    }
-    case COFFEE: open_coffee(); break;
     case DOGFIGHT: break;   // not made yet (greyed out)
     case BACK: back(); break;
     case RESUME: push(Action::Resume); break;
@@ -859,7 +781,6 @@ void Frontend::back() {
         break;
     case Screen::Records: open(Screen::Main); selected_ = index_of(RECORDS); break;
     case Screen::Extra: open(Screen::Play); selected_ = 1; break;   // onto Extra modes
-    case Screen::More: open(Screen::Main); selected_ = index_of(MORE_GAMES); break;
     case Screen::Pause: push(Action::Resume); break;
     case Screen::Main: selected_ = index_of(QUIT); dirty_ = true; break;
     case Screen::Debug:
@@ -902,10 +823,6 @@ bool Frontend::key(int vk) {
         case 'E': case VK_NEXT: set_tab(tab_ + 1); return true;
         case VK_TAB: set_tab(tab_ + ((GetKeyState(VK_SHIFT) & 0x8000) ? -1 : 1)); return true;
         }
-    if (screen_ == Screen::More && vk == 'G' && selected_recomp() >= 0) {   // its page, also when it is installed
-        open_recomp_page(selected_recomp());
-        return true;
-    }
     switch (vk) {
     case VK_UP: case 'W': select((selected_ + n - 1) % n); return true;
     case VK_DOWN: case 'S': select((selected_ + 1) % n); return true;
@@ -924,70 +841,6 @@ bool Frontend::key(int vk) {
     case VK_ESCAPE: case VK_BACK: back(); return true;
     }
     return false;
-}
-
-void Frontend::open_coffee() {   // in the default browser
-    ShellExecuteW(nullptr, L"open", COFFEE_URL, nullptr, nullptr, SW_SHOWNORMAL);
-}
-
-int Frontend::recomp_of(Id id) { return id == LOST_WORLD ? 0 : id == SEGA_RALLY_2 ? 1 : -1; }
-
-int Frontend::selected_recomp() const {
-    if (screen_ != Screen::More) return -1;
-    std::vector<Item> list = items();
-    return selected_ >= 0 && selected_ < int(list.size()) ? recomp_of(list[selected_].id) : -1;
-}
-
-std::string& Frontend::recomp_path(int r) { return r == 0 ? settings.lost_world_path : settings.sega_rally_2_path; }
-
-// Its .exe: where the settings say, else in a folder next to this port's
-// (from the working folder, then from the exe's)
-void Frontend::find_recomp(int r) {
-    const Recomp& rc = RECOMPS[r];
-    more_exe_[r].clear();
-    std::vector<std::wstring> tries;
-    if (const std::string& p = recomp_path(r); !p.empty()) {
-        int n = MultiByteToWideChar(CP_UTF8, 0, p.c_str(), -1, nullptr, 0);
-        std::wstring wp(n > 0 ? n - 1 : 0, L'\0');
-        if (n > 1) MultiByteToWideChar(CP_UTF8, 0, p.c_str(), -1, wp.data(), n);
-        bool exe = wp.size() > 4 && _wcsicmp(wp.c_str() + wp.size() - 4, L".exe") == 0;
-        tries.push_back(exe ? wp : wp + L"\\" + rc.exe);
-    }
-    wchar_t module[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, module, MAX_PATH);
-    std::wstring exe_dir = module;
-    exe_dir = exe_dir.substr(0, exe_dir.find_last_of(L"\\/") + 1);
-    for (const std::wstring& base : {std::wstring(), exe_dir})
-        for (const wchar_t* folder : rc.folders)
-            tries.push_back(base + L"..\\" + folder + L"\\" + rc.exe);
-    for (const std::wstring& t : tries) {
-        wchar_t full[MAX_PATH];
-        if (!GetFullPathNameW(t.c_str(), MAX_PATH, full, nullptr)) continue;
-        DWORD a = GetFileAttributesW(full);
-        if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY)) {
-            more_exe_[r] = full;
-            printf("[menu] %ls: %ls\n", rc.name, full);
-            return;
-        }
-    }
-}
-
-void Frontend::open_recomp_page(int r) {   // in the default browser
-    ShellExecuteW(nullptr, L"open", RECOMPS[r].url, nullptr, nullptr, SW_SHOWNORMAL);
-}
-
-// Started from its own folder (it finds its ROM, res/ and save/ there); this
-// game closes so the two do not fight over the GPU and the sound
-void Frontend::play_recomp(int r) {
-    const std::wstring& exe = more_exe_[r];
-    std::wstring dir = exe.substr(0, exe.find_last_of(L"\\/"));
-    if (INT_PTR(ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL)) > 32) {
-        push(Action::Quit);
-        return;
-    }
-    printf("[menu] could not start %ls\n", exe.c_str());
-    more_exe_[r].clear();   // shown as not installed: ENTER opens the page
-    dirty_ = true;
 }
 
 // ---- UPDATE AVAILABLE ----
@@ -1952,17 +1805,6 @@ void Frontend::backdrop_background() {
     fill(0, 0, w_, h_, 0x000000, 0.3f);
     px_ = bg_.data();
     shade_backdrop();
-    // MORE RECOMPS: each game's art in place of the picture, its logo on the left
-    for (int i = 0; i < RECOMP_COUNT; i++) {
-        bg_more_[i].clear();
-        if (more_backdrop_[i].w <= 0) continue;
-        bg_more_[i].assign(size_t(w_) * h_, 0xFF000000u);
-        px_ = bg_more_[i].data();
-        picture(more_backdrop_[i], 0, 0, w_, h_, 0.25f);
-        shade_backdrop();
-        RECT r = more_logo_rect(i);
-        if (r.right > r.left) sprite(more_logo_[i], r.left, r.top, r.right - r.left, r.bottom - r.top);
-    }
     px_ = keep;
 }
 
@@ -1998,20 +1840,6 @@ void Frontend::shade_backdrop() {
     }
 }
 
-// Centred in the room left of the menu's column, at most 560 (1080p) wide;
-// empty when the window is too narrow for it
-RECT Frontend::more_logo_rect(int i) const {
-    const Picture& logo = more_logo_[i];
-    if (logo.w <= 0) return RECT{};
-    auto U = [&](float v) { return int(v * u_ + 0.5f); };
-    int room = w_ - U(110) - U(720) - U(40);
-    int lw = std::min(U(RECOMPS[i].logo_w), room - U(120));
-    if (lw < U(220)) return RECT{};
-    int lh = lw * logo.h / logo.w;
-    int x = (room - lw) / 2, y = int(RECOMPS[i].logo_top * h_);
-    return RECT{x, y, x + lw, y + lh};
-}
-
 // Main, Play, Extra and Debug on the backdrop: the entries in a
 // column at the right under the logo, the description under them; the
 // records at the top left, the credits at the bottom
@@ -2021,7 +1849,7 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
     int margin = U(110), col_w = U(720);
     int tx = w - margin, band0 = w - margin - col_w, band1 = w;
     int y0 = int((LOGO_TOP + LOGO_H) * h_) + U(36);
-    const wchar_t* sub = screen_ == Screen::Play ? L"SELECT MODE" : screen_ == Screen::Extra ? L"EXTRA MODES" : screen_ == Screen::More ? L"MORE RECOMPS BY SNICOLAST"
+    const wchar_t* sub = screen_ == Screen::Play ? L"SELECT MODE" : screen_ == Screen::Extra ? L"EXTRA MODES"
                          : screen_ == Screen::Debug ? (debug_stage_ < 0 ? L"DEBUG:  SELECT STAGE" : L"DEBUG:  SELECT PHASE")
                          : nullptr;
     if (sub) {
@@ -2047,15 +1875,8 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
         }
     }
 
-    if (int rc = more_art_; screen_ == Screen::More && !bg_more_[rc].empty()) {   // under its logo (on the backdrop)
-        RECT r = more_logo_rect(rc);
-        if (r.right > r.left)
-            text(MONO, U(22), RECOMPS[rc].caption, (r.left + r.right) / 2, r.bottom + U(26), 1,
-                 {0xE8D8B0, 0xC8B080, EDGE, U(2)});
-    }
-
-    // The entries share what is left of the height, the description under
-    // them. The main menu as The Lost World's and Sega Rally 2's: PLAY big,
+    // The entries share what is left of the height; the description of the
+    // chosen one right under it, the entries below making room. The main menu as The Lost World's and Sega Rally 2's: PLAY big,
     // the rest smaller under it
     int n = int(list.size());
     const int spacing_all = std::clamp((h - U(230) - y0) / std::max(1, n), U(44), U(84));
@@ -2081,27 +1902,7 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
                          : debug_row ? Style{0xFF8A7A, 0xD8402E, EDGE, U(2), 0.95f, U(3)}
                                      : Style{PALE_TOP, PALE_BOTTOM, EDGE, U(2), 0.95f, U(3)};
         int ty = y + spacing / 2 - item_px * 55 / 100;
-        int tw = 0;
-        if (it.id == COFFEE) {   // the donation link: Buy Me a Coffee's yellow button and its cup, at the right
-            int ch = std::min(U(56), spacing - U(14)), cup = ch / 2;
-            int x1 = tx, x0 = x1 - (U(24) + cup + U(12) + measure(ITEM, U(21), COFFEE_LABEL) + U(28));
-            int cy0 = y + (spacing - ch) / 2;
-            if (sel)   // chosen: a ring round it, and brighter
-                pill(x0 - U(5), cy0 - U(5), x1 + U(5), cy0 + ch + U(5), SABER, 1);
-            pill(x0, cy0, x1, cy0 + ch, sel ? 0xFFE94D : 0xFFDD00, sel ? 1.0f : 0.9f);
-            // A takeaway cup: the lid, the body narrowing to the bottom, a yellow sleeve round its middle
-            int cx = x0 + U(24) + cup / 2, cy = cy0 + (ch - cup) / 2;
-            pill(cx - cup / 2, cy, cx + cup / 2, cy + cup * 22 / 100, COFFEE_INK, 1);
-            for (int yy = cy + cup * 26 / 100; yy < cy + cup; yy++) {
-                int half = cup * 42 / 100 - (yy - cy) * 12 / 100, edge = std::max(1, U(2));
-                fill(cx - half, yy, cx + half, yy + 1, COFFEE_INK, 1);
-                if (yy >= cy + cup * 48 / 100 && yy < cy + cup * 72 / 100)
-                    fill(cx - half + edge, yy, cx + half - edge, yy + 1, 0xFFDD00, 1);
-            }
-            text(ITEM, U(21), COFFEE_LABEL, x0 + U(24) + cup + U(12), cy0 + ch / 2 - U(13), 0, {COFFEE_INK, COFFEE_INK});
-        } else {
-            tw = text(display(), item_px, it.label, tx, ty, 2, st);
-        }
+        int tw = text(display(), item_px, it.label, tx, ty, 2, st);
         const bool chevron = hero_menu && sel && it.enabled && tw > 0;   // as in The Lost World and Sega Rally 2
         if (chevron) triangle(tx - tw - U(28), y + spacing / 2, U(22), +1, 0xFFE08A, 0.95f);
         if (!it.value.empty())   // e.g. COMING SOON
@@ -2110,12 +1911,13 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
         hit_.push_back({band0, y, band1, y + spacing});
         values_.push_back({-1, 0});
         y += spacing;
-    }
-    if (selected_ < n) {
-        y += U(10);
-        for (const std::wstring& line : wrap(ITEM, U(24), list[selected_].hint, col_w - U(20))) {
-            text(ITEM, U(24), line, tx, y, 2, {HINT, HINT});
-            y += U(32);
+        if (sel) {   // its description right under it, the entries below move down
+            y += U(4);
+            for (const std::wstring& line : wrap(ITEM, U(24), it.hint, col_w - U(20))) {
+                text(ITEM, U(24), line, tx, y, 2, {HINT, HINT});
+                y += U(32);
+            }
+            y += U(10);
         }
     }
 
@@ -2133,10 +1935,6 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
     // The keys at the right, each in a keycap (or the gamepad's button), ending at the right edge
     struct Key { const wchar_t *pad, *key, *what; };
     std::vector<Key> keys = {{L"A", L"ENTER", L"SELECT"}};
-    if (int rc = selected_recomp(); rc >= 0) {
-        if (more_exe_[rc].empty()) keys = {{L"A", L"ENTER", L"OPEN PAGE"}};
-        else keys = {{L"A", L"ENTER", L"PLAY"}, {L"Y", L"G", L"GITHUB PAGE"}};
-    }
     if (screen_ != Screen::Main) keys.push_back({L"B", L"ESC", L"BACK"});
     int kh = U(36), ky = fy + U(12) - kh / 2, x = w - U(70) + U(40);
     for (const Key& k : keys) x -= prompt_width(kh, k.pad, k.key, k.what);
@@ -2283,7 +2081,6 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
         u_ = std::min(h / 1080.0f, w / 1440.0f);
         bg_.clear();
         bg_stone_.clear();
-        for (auto& b : bg_more_) b.clear();
     }
     if (screen_ == Screen::Splash) {
         if (draw_splash(out)) {
@@ -2299,10 +2096,7 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
     if (over_game) out.assign(size_t(w) * h, 0);
     else {
         if (bg_.empty()) background();
-        if (int rc = selected_recomp(); rc >= 0) more_art_ = rc;   // on BACK: the last one's art stays
-        out = (has_backdrop() && page) || (has_poster() && screen_ == Screen::Options) ? bg_stone_
-              : screen_ == Screen::More && !bg_more_[more_art_].empty()            ? bg_more_[more_art_]
-                                                                                     : bg_;
+        out = (has_backdrop() && page) || (has_poster() && screen_ == Screen::Options) ? bg_stone_ : bg_;
     }
     px_ = out.data();
     hit_.clear();
@@ -2353,7 +2147,7 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
         float ps, py0;
         poster_layout(ps, py0);
         int logo_end = int(py0 + POSTER_LOGO_END * poster_h_ * ps);
-        const wchar_t* sub = screen_ == Screen::Play ? L"SELECT MODE" : screen_ == Screen::Extra ? L"EXTRA MODES" : screen_ == Screen::More ? L"MORE RECOMPS BY SNICOLAST" : screen_ == Screen::Debug ? (debug_stage_ < 0 ? L"DEBUG:  SELECT STAGE" : L"DEBUG:  SELECT PHASE") : options ? L"OPTIONS" : nullptr;
+        const wchar_t* sub = screen_ == Screen::Play ? L"SELECT MODE" : screen_ == Screen::Extra ? L"EXTRA MODES" : screen_ == Screen::Debug ? (debug_stage_ < 0 ? L"DEBUG:  SELECT STAGE" : L"DEBUG:  SELECT PHASE") : options ? L"OPTIONS" : nullptr;
         if (sub) text(MONO, U(28), sub, cx, options ? U(390) : logo_end + U(20), 1, {0x9ED8FF, 0x6AB8F0});
         y_items = options ? U(432) : logo_end + U(80);
         spacing = options ? U(56) : screen_ == Screen::Debug ? U(52) : U(84);
@@ -2377,7 +2171,7 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
         text(display(), U(214), L"S T A R    W A R S", cx, U(70), 1, {GOLD_TOP, GOLD_BOTTOM, EDGE, U(7), 1, U(9)});
         saber(cx, U(330), U(360));
         text(MONO, U(40), L"T  R  I  L  O  G  Y      A  R  C  A  D  E", cx, U(352), 1, {0xD8ECFF, 0x9CC4EC, EDGE, U(2)});
-        const wchar_t* sub = screen_ == Screen::Play ? L"SELECT MODE" : screen_ == Screen::Extra ? L"EXTRA MODES" : screen_ == Screen::More ? L"MORE RECOMPS BY SNICOLAST" : screen_ == Screen::Debug ? (debug_stage_ < 0 ? L"DEBUG:  SELECT STAGE" : L"DEBUG:  SELECT PHASE") : options ? L"OPTIONS" : nullptr;
+        const wchar_t* sub = screen_ == Screen::Play ? L"SELECT MODE" : screen_ == Screen::Extra ? L"EXTRA MODES" : screen_ == Screen::Debug ? (debug_stage_ < 0 ? L"DEBUG:  SELECT STAGE" : L"DEBUG:  SELECT PHASE") : options ? L"OPTIONS" : nullptr;
         if (sub) text(MONO, U(28), sub, cx, U(408), 1, {0x9ED8FF, 0x6AB8F0});
         y_items = options ? U(452) : U(490);
         spacing = options ? U(56) : screen_ == Screen::Debug ? U(52) : U(84);

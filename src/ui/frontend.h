@@ -68,8 +68,6 @@ struct FrontendSettings {
     bool menu_music = true; // the game's Main Title in the menus
     int sight_size = 80;    // the game's sight drawn at this size, % (Star Wars Trilogy)
     bool pointer_sight = true; // the sight goes where the mouse / light gun points (false: the mouse is the lever)
-    std::string lost_world_path;   // MORE RECOMPS: where The Lost World is (its folder or LostWorld.exe; "" = look for it)
-    std::string sega_rally_2_path; // MORE RECOMPS: where Sega Rally 2 is (its folder or SegaRally2.exe; "" = look for it)
     bool check_updates = true;     // at launch, news.txt on GitHub: a window with what is new and UPDATE NOW
     int news_seen = 0;             // the newest news.txt entry the player closed with LATER
 
@@ -85,7 +83,7 @@ struct FrontendSettings {
 
 class Frontend {
 public:
-    enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug, Extra, More };
+    enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug, Extra };
     enum class Action { None, StartArcade, Resume, Quit, ToggleFullscreen, SettingsChanged,
                         QuitToMenu, StartDebug };
 
@@ -139,7 +137,7 @@ public:
 private:
     enum Id {
         PLAY, OPTIONS, QUIT, ARCADE, BACK, RESUME, SETTINGS, QUIT_TO_MENU, TABS,
-        RECORDS, DEBUG, DEBUG_STAGE, DEBUG_PHASE, MORE_GAMES, LOST_WORLD, SEGA_RALLY_2, COFFEE,
+        RECORDS, DEBUG, DEBUG_STAGE, DEBUG_PHASE,
         OPT_QUALITY, OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SKY, OPT_SUN, OPT_SHADOWS, OPT_SHAFTS, OPT_SOFT, OPT_HDR, OPT_RELIEF, OPT_SHARPEN, OPT_TEXT, OPT_CROSS, OPT_MICE,
         OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, EXTRA, DOGFIGHT, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
         OPT_ASPECT, OPT_EXPLOSIONS,
@@ -211,22 +209,6 @@ private:
     void backdrop_background();
     // Main, Play, Boss, Survival and Debug on the backdrop: a column at the right under the logo
     void draw_side_menu(const std::vector<Item>& list);
-    // MORE RECOMPS: snicolast's other ports (The Lost World, Sega Rally 2),
-    // in the order of RECOMPS in frontend.cpp. The selected one's art
-    // (res/menu/more/) on the left of the backdrop; ENTER plays it when it is
-    // on this PC, else opens its page
-    static constexpr int RECOMP_COUNT = 2;
-    Picture more_backdrop_[RECOMP_COUNT], more_logo_[RECOMP_COUNT];
-    std::vector<uint32_t> bg_more_[RECOMP_COUNT];   // their backdrops of MORE RECOMPS for the current size
-    std::wstring more_exe_[RECOMP_COUNT];           // its .exe found on this PC ("" = not found)
-    int more_art_ = 0;                              // whose art MORE RECOMPS shows (the selected one, or the last)
-    static int recomp_of(Id id);                    // its index, -1 for an entry that is not one
-    int selected_recomp() const;                    // MORE RECOMPS: the selected one, -1 on BACK
-    std::string& recomp_path(int r);                // its settings key (folder or .exe)
-    void find_recomp(int r);
-    void open_recomp_page(int r);
-    void play_recomp(int r);
-    RECT more_logo_rect(int r) const;               // where its logo goes on the backdrop
     void shade_backdrop();            // darker at the right and the bottom, the logo: on px_
     // UPDATE AVAILABLE: the window over the main menu with the entries of
     // news.txt this version lacks. UPDATE NOW starts update.bat (it waits for the game to close,
@@ -249,8 +231,6 @@ private:
     bool news_key(int vk);
     void news_choose(int button);
     void start_update();
-
-    void open_coffee();   // the donation link (an entry of MORE RECOMPS)
 
     // The splash screens: their pictures, which one is on and since when
     std::vector<Picture> splash_;
