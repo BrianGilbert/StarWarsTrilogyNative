@@ -20,6 +20,7 @@
 #include <atomic>
 #include <mutex>
 
+#include "disk_writer.h"
 #include "eeprom.h"
 #include "inputs.h"
 #include "fns.h"
@@ -997,6 +998,7 @@ ULONGLONG g_boot_ms = GetTickCount64();
 // Exit from the game thread itself: nothing else pushes audio, so it is
 // stopped here before the process goes away
 [[noreturn]] void exit_from_game_thread(int code) {
+    disk_flush();   // the EEPROM's last words (written by the disk writer's thread)
     fflush(stdout);
     g_audio.stop();
     ExitProcess(code);

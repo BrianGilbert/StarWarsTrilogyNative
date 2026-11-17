@@ -17,6 +17,7 @@
 #include "stats.h"
 
 #include "achievements_csv.h"
+#include "disk_writer.h"
 #include "inputs.h"
 
 #include <algorithm>
@@ -28,12 +29,6 @@
 #include <string>
 
 #include "ppc_rt.h"
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#endif
 
 namespace {
 
@@ -92,17 +87,10 @@ int64_t raw_progress(const Stats& s, const std::string& k) {
 struct Ini {
     std::vector<std::pair<std::string, int64_t>> rows;
     void put(const std::string& k, int64_t v) { rows.push_back({k, v}); }
-    bool save(const char* path) const {
-        std::string tmp = std::string(path) + ".tmp";
-        FILE* f = fopen(tmp.c_str(), "w");
-        if (!f) return false;
-        for (auto& [k, v] : rows) fprintf(f, "%s = %lld\n", k.c_str(), (long long)v);
-        bool ok = fclose(f) == 0;
-#ifdef _WIN32
-        return ok && MoveFileExA(tmp.c_str(), path, MOVEFILE_REPLACE_EXISTING);
-#else
-        return ok && rename(tmp.c_str(), path) == 0;
-#endif
+    void save(const char* path) const {   // (by the disk writer's thread)
+        std::string text;
+        for (auto& [k, v] : rows) text += k + " = " + std::to_string(v) + "\n";
+        disk_replace(path, std::move(text));
     }
     static Ini load(const char* path) {
         Ini ini;
@@ -188,18 +176,7 @@ void write_achievements_json(const Stats& s, const std::vector<int64_t>& unlocke
         out += i + 1 < TABLE.size() ? ",\n" : "\n";
     }
     out += "  ]\n}\n";
-    const char* path = "save/achievements.json";
-    std::string tmp = std::string(path) + ".tmp";
-    FILE* f = fopen(tmp.c_str(), "wb");
-    if (!f) return;
-    bool ok = fwrite(out.data(), 1, out.size(), f) == out.size();
-    ok = fclose(f) == 0 && ok;
-#ifdef _WIN32
-    ok = ok && MoveFileExA(tmp.c_str(), path, MOVEFILE_REPLACE_EXISTING);
-#else
-    ok = ok && rename(tmp.c_str(), path) == 0;
-#endif
-    if (!ok) printf("[achievements] could not save %s\n", path);
+    disk_replace("save/achievements.json", std::move(out));
     write_achievements_csv(csv);
 }
 
@@ -223,7 +200,8 @@ struct Tracker {
     int stage_phases = 0;        // phases cleared in it
     bool phase_hurt = false;
     uint64_t saved_at = 0;
-    bool dirty = false;
+    bool dirty = false;    // a game, a phase, a stage or an achievement: saved at once
+    bool played = false;   // only the running counts (play time, kills, score): saved every few minutes
 
     bool counting() const { return in_game && !cheated; }
 
@@ -246,10 +224,11 @@ struct Tracker {
         Ini a;
         for (size_t i = 0; i < TABLE.size(); i++)
             if (unlocked[i]) a.put(TABLE[i].key, unlocked[i]);
-        if (!ini.save(STATS_FILE) || !a.save(ACHIEVEMENTS_FILE)) printf("[achievements] could not save save/stats.ini\n");
+        ini.save(STATS_FILE);
+        a.save(ACHIEVEMENTS_FILE);
         write_achievements_json(stats, unlocked);
         saved_at = frame;
-        dirty = false;
+        dirty = played = false;
     }
 
     // With the mutex held
@@ -348,15 +327,20 @@ struct Tracker {
             if (ap > appeared && ap - appeared < 20) stats.appeared += ap - appeared;
             if (sh < shield) phase_hurt = true;
             stats.best_score = std::max(stats.best_score, score);
-            dirty = true;
+            played = true;
         }
         if (in_game && md == 0) {   // back in the attract: the game is over
             stage_end(false);
             in_game = cheated = false;
+            if (played) dirty = true;
         }
         mode = md, state = st, destroyed = de, appeared = ap, shield = sh;
         check_achievements();
-        if (dirty && frame - saved_at > uint64_t(frames_of(30))) save();
+        // The files go out from the disk writer's thread: the game thread only
+        // builds their text (a slow drive used to stop the game for a moment
+        // here, every 30 s of play). Every phase end saves, so the running
+        // counts lose at most a phase if the program is killed.
+        if (dirty || (played && frame - saved_at > uint64_t(frames_of(300)))) save();
     }
 };
 
@@ -380,10 +364,13 @@ void stats_init() {
     for (uint32_t fn : FN_RESULTS) g_trace_bits[(fn >> 5) & 511] |= uint8_t(1 << ((fn >> 2) & 7));
 }
 
+// (at exit: also waits for every file still being written, the EEPROM's too)
 void stats_save() {
-    if (!g.on) return;
-    std::lock_guard<std::mutex> lock(g.mutex);
-    g.save();
+    if (g.on) {
+        std::lock_guard<std::mutex> lock(g.mutex);
+        g.save();
+    }
+    disk_flush();
 }
 
 StatsView stats_view() {

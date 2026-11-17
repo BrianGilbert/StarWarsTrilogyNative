@@ -22,6 +22,7 @@ struct CsvAchievement {
 // icons false the two icon columns stay empty.
 std::string achievements_csv(const std::vector<CsvAchievement>& list, bool icons, int64_t now);
 
-// Writes achievements/icons/ first, then achievements/achievements.csv (each
-// file replaced in one step). Logs and gives up quietly when it cannot.
+// Writes achievements/icons/ first (once a run, at the first call), then
+// achievements/achievements.csv (each file replaced in one step; the csv by
+// the disk writer's thread, disk_writer.h). Logs and gives up quietly when it cannot.
 void write_achievements_csv(const std::vector<CsvAchievement>& list);
