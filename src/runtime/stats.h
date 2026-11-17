@@ -57,7 +57,7 @@ struct StatsView {
 };
 StatsView stats_view();
 std::vector<int> stats_take_new_achievements();   // unlocked since the last call, for the toast
-void stats_save();                  // at exit (it also saves by itself every 30 s of play)
+void stats_save();                  // at exit, waiting for the files (it also saves by itself as things change, the running counts every 5 min)
 
 // Game thread
 void stats_frame();                 // every vblank

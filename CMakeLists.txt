@@ -226,6 +226,7 @@ add_executable(StarWarsTrilogy WIN32
     src/runtime/app_input.cpp
     src/runtime/settings_bridge.cpp
     src/runtime/eeprom.cpp
+    src/runtime/disk_writer.cpp
     src/runtime/jtag.cpp
     src/runtime/drive_board.cpp
     third_party/z80/z80.c
@@ -369,10 +370,11 @@ if(LW_TESTS)
         target_include_directories(menu_music_test PRIVATE third_party/minimp3)
         set(MENU_MUSIC_TEST menu_music_test)
     endif()
-    add_executable(achievements_csv_test tests/achievements_csv_test.cpp src/runtime/achievements_csv.cpp)
+    add_executable(achievements_csv_test tests/achievements_csv_test.cpp src/runtime/achievements_csv.cpp src/runtime/disk_writer.cpp)
     target_include_directories(achievements_csv_test PRIVATE ${ICONS_DIR})
+    add_executable(disk_writer_test tests/disk_writer_test.cpp src/runtime/disk_writer.cpp)
     foreach(t tilegen_test fnv_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test news_test ${MENU_MUSIC_TEST}
-            achievements_csv_test)
+            achievements_csv_test disk_writer_test)
         target_include_directories(${t} PRIVATE src/video src/common src/runtime src/audio src/ui ${MINIZ_DIR})
         if(MSVC)
             target_compile_options(${t} PRIVATE /W4 /utf-8)
@@ -392,6 +394,7 @@ if(LW_TESTS)
     add_test(NAME r3d_state COMMAND r3d_state_test)
     add_test(NAME news COMMAND news_test)
     add_test(NAME achievements_csv COMMAND achievements_csv_test)
+    add_test(NAME disk_writer COMMAND disk_writer_test)
     if(NOT APPLE)
         add_test(NAME menu_music COMMAND menu_music_test)
     endif()
