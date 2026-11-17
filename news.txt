@@ -13,6 +13,9 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[20] 2026-11-17
+- Smoother play on slow drives (external SSD, USB stick, or an antivirus that scans every file): stats, achievements and the game's settings memory are now saved in the background, so saving no longer stops the game for a moment
+
 [19] 2026-11-17
 - Flight sticks such as the X56 HOTAS, and older gamepads that are not Xbox or PlayStation pads, are now detected when the game is installed with NicoLauncher
 
