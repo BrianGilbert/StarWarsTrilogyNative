@@ -213,13 +213,40 @@ void r3d_widen_screen_fills(R3DScene& out, float wide) {
         if (v.world || v.shares_world || v.x > 0.5f || v.w < 495.5f) continue;
         for (int pass = 0; pass < 2; pass++) {
             uint32_t first = pass ? v.trans_first : v.opaque_first, count = pass ? v.trans_count : v.opaque_count;
+            // Decided per polygon, not per triangle: a quad is two triangles, and
+            // when only one of them covered the screen (Endor's bunker explosion:
+            // the other ends 0.4 pixel short of the bottom) only that half was
+            // widened, a diagonal break across the picture (issue 75). Also a
+            // backdrop facing the camera across the whole width that leaves the
+            // bottom to the scenery in front (the sky of that scene): widened, or
+            // the wider view showed black beside it
+            std::vector<uint8_t> fill(count / 3, 0);
             for (uint32_t t = 0; t + 2 < count; t += 3) {
-                R3DVertex* tri = &out.vertices[first + t];
+                const R3DVertex* tri = &out.vertices[first + t];
                 float b[4];
                 if (!screen_bbox(v, tri, b)) continue;
-                if (b[0] > v.x + 2 || b[2] < v.x + v.w - 2 || b[1] > v.y + 2 || b[3] < v.y + v.h - 2) continue;
-                for (int k = 0; k < 3; k++) tri[k].pos[0] *= wide;
+                bool across = b[0] <= v.x + 2 && b[2] >= v.x + v.w - 2;
+                bool full = across && b[1] <= v.y + 2 && b[3] >= v.y + v.h - 2;
+                const float* n = tri[0].nrm;
+                float nl = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+                bool backdrop = across && (b[1] <= v.y + 2 || b[3] >= v.y + v.h - 2) && nl > 0 && std::fabs(n[2]) > 0.95f * nl;
+                fill[t / 3] = full || backdrop;
             }
+            auto same = [](const R3DVertex& a, const R3DVertex& b) {
+                return a.pos[0] == b.pos[0] && a.pos[1] == b.pos[1] && a.pos[2] == b.pos[2];
+            };
+            auto shares_edge = [&](uint32_t a, uint32_t b) {   // two vertices in common: one polygon
+                int n = 0;
+                for (int i = 0; i < 3; i++)
+                    for (int j = 0; j < 3; j++) n += same(out.vertices[first + a + i], out.vertices[first + b + j]);
+                return n >= 2;
+            };
+            std::vector<uint8_t> widen(fill);
+            for (uint32_t i = 0; i + 1 < fill.size(); i++)
+                if ((fill[i] || fill[i + 1]) && shares_edge(i * 3, i * 3 + 3)) widen[i] = widen[i + 1] = 1;
+            for (uint32_t i = 0; i < widen.size(); i++)
+                if (widen[i])
+                    for (int k = 0; k < 3; k++) out.vertices[first + i * 3 + k].pos[0] *= wide;
         }
     }
 }
