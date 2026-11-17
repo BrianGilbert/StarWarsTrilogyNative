@@ -96,7 +96,18 @@ void R3DWorldTracker::track(const std::vector<std::vector<R3DInstance>>& viewpor
     // few big pieces (Hoth's base: a handful of tunnel sections, each turned
     // its own way) is still one with thousands of polygons in three of them
     size_t min_models = best_polygons >= 1500 ? 3 : 8;
-    if (best < 0 || best_polygons < 300 || scenery.by_key.size() < min_models) {
+    // To become one, those pieces must be big ones: the Death Star's reactor
+    // room is two models of ~1700 polygons and a small light (36) that the
+    // game draws on some frames only, and the room went in and out of being
+    // a world (haze, light) with it, a strobe (issue 75). It stays no world,
+    // as on the arcade; a world already tracked goes on as before
+    size_t models = scenery.by_key.size();
+    if (!tracking_ && best_polygons >= 1500 && models < 8) {
+        models = 0;
+        for (const R3DInstance& in : viewport_instances[best])
+            if (same_axes(in.axes, axes) && in.polygons * 16 >= best_polygons) models++;
+    }
+    if (best < 0 || best_polygons < 300 || models < min_models) {
         tracking_ = false;
         scenery_prev_ = {};
         return;

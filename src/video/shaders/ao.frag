@@ -24,7 +24,10 @@ layout(set = 1, binding = 1) uniform sampler2D replacements[4096];
 // Short rays over the hemisphere above the surface (cosine weighted, turned
 // per pixel): the nearer what they meet, the more it hides
 float traced_open(vec3 p, vec3 n, float noise) {
-    float radius = ao.params.x;
+    // No more than the depth-based path's largest radius on screen (misc.y
+    // pixels): the duels' worlds are small (a few units across) and 12 units
+    // took in whole walls, which were then grey and noisy (issue 75)
+    float radius = min(ao.params.x, ao.misc.y * 2.0 * -p.z / (abs(ao.proj.y) * ao.rect.w));
     vec3 origin = p + n * (0.02 + 0.002 * -p.z);
     vec3 t = normalize(cross(abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0), n));
     vec3 b = cross(n, t);
@@ -60,7 +63,10 @@ void main() {
     if (dot(n, p) > 0.0) n = -n;   // towards the camera
 
     // Rotated per pixel (and per frame with DLAA, which averages it out)
-    float noise = fract(52.9829189 * fract(dot(frag, vec2(0.06711056, 0.00583715))) + ao.misc.x);
+    // On the half-resolution grid (one step per texel): on the full-size
+    // coordinates (two pixels a step) the angle barely changed from one texel
+    // to the next across, and the 3x3 smoothing left vertical stripes
+    float noise = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))) + ao.misc.x);
     // Fogged surfaces lose their shading, so they lose the occlusion too
     float fog = clamp(ao.params.w + (-p.z) * ao.params.z, 0.0, 1.0);
 #ifdef RAY_TRACING
