@@ -517,8 +517,10 @@ bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, 
         upload_slot(compose_set_, 3, overlay_sampler_, 0, 1, 1, clear, true);
         upload_slot(compose_set_, 5, overlay_sampler_, 0, 1, 1, clear);
     }
+#ifdef __linux__
     // The driver's compiled shaders, kept from one start to the next: on a slow
     // one (Mesa on a Raspberry Pi) the first start compiles them for minutes.
+    // Linux only: the Windows and macOS drivers keep their own shader cache.
     // The driver checks the file is its own (vendor, device, its cache UUID)
     constexpr const char* CACHE_FILE = "save/pipelines.bin";
     std::vector<char> cached;
@@ -547,21 +549,28 @@ bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, 
     if (cached.empty())
         printf("[video] compiling the shaders: on a slow GPU driver (a Raspberry Pi) this first start can take "
                "minutes, the next ones much less\n");
+#endif
     init_log("pipelines (the driver compiles the shaders)");
     bool pipelines = create_pipelines();
     init_log(pipelines ? "renderer ready" : "pipelines failed");
+#ifdef __linux__
     if (pipelines && pipeline_cache_ && cached.empty()) {
         size_t size = 0;
         vkGetPipelineCacheData(dev_, pipeline_cache_, &size, nullptr);
         std::vector<char> data(size);
         if (size && vkGetPipelineCacheData(dev_, pipeline_cache_, &size, data.data()) == VK_SUCCESS) {
+            // Written aside, then renamed: a process killed while writing leaves
+            // no truncated file with a valid header for the next start
+            constexpr const char* TEMP_FILE = "save/pipelines.bin.tmp";
             CreateDirectoryA("save", nullptr);
-            if (FILE* f = fopen(CACHE_FILE, "wb")) {
-                fwrite(data.data(), 1, size, f);
-                fclose(f);
+            if (FILE* f = fopen(TEMP_FILE, "wb")) {
+                bool written = fwrite(data.data(), 1, size, f) == size;
+                written = fclose(f) == 0 && written;
+                if (!written || rename(TEMP_FILE, CACHE_FILE) != 0) remove(TEMP_FILE);
             }
         }
     }
+#endif
     return pipelines;
 }
 
