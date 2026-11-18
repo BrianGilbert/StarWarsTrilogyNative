@@ -1,6 +1,6 @@
 # Star Wars Trilogy Native on Linux
 
-The Linux build is maintained by contributors. It runs on x86_64 and arm64 (aarch64) with X11 or Wayland.
+The Linux build is maintained by contributors. It isn't tested by the project's author. It runs on x86_64 and arm64 (aarch64) with X11 or Wayland.
 
 ## Build
 
@@ -42,14 +42,6 @@ sudo apt install lld qemu-user libc6-dev:arm64 libstdc++-14-dev:arm64 libgcc-14-
 
 On an arm64 computer itself, `./build_linux.sh` builds for it as on x86_64.
 
-## Older systems
-
-A program built as above needs a system at least as recent as the one it was built on: its C library (glibc) and
-its C++ library. `./build_linux.sh --glibc 2.34` (with `--arch aarch64` or not) builds one that runs on anything
-with that glibc or a later one (2.34: RHEL 9, Ubuntu 22.04, Debian 12, Raspberry Pi OS Bookworm), with the C++
-library inside it. It compiles with `zig cc`, fetched once into `build/tools` (it needs `python3-venv`); the
-development files are the same.
-
 ## Raspberry Pi 5
 
 The arm64 build is made with the Raspberry Pi 5 in mind (built on it with `./build_linux.sh`, or on a PC with
@@ -60,18 +52,12 @@ The arm64 build is made with the Raspberry Pi 5 in mind (built on it with `./bui
   says `Vulkan 1.2 with VK_KHR_dynamic_rendering`). With an older driver the game names it and its Vulkan version
   when it starts. If the log says the picture is drawn `on the processor` (Mesa's llvmpipe), no GPU driver was
   usable: update the system.
-- Built on the Pi itself the program fits its system; built on a PC, `--glibc 2.34` makes one for Bookworm and
-  Trixie alike.
+- Built on a PC, the program needs a system at least as recent as the PC's (its glibc and C++ library): building on
+  the Pi itself is the simplest.
 - The GPU has no descriptor indexing: the game runs without the texture pack and the 2D replacement pictures (the
   game's own textures and text), and without ray tracing (the shadow map draws the sun shadows).
 - It is far slower than a desktop GPU: start with **Options > Display > Quality > LOW**, anti-aliasing off, a
   1280x720 or 1920x1080 screen.
-
-## Another of your computers
-
-`./build_linux.sh --package` (with `--arch aarch64` or not) also makes `dist/StarWarsTrilogy-linux-<arch>/`: the
-program with everything it plays from (the data extracted from your ROM included). Copy that folder whole to another
-of your own computers and run `./StarWarsTrilogy` in it. It holds your ROM's data and code: keep it to yourself.
 
 ## Compared with Windows
 
