@@ -1,0 +1,59 @@
+# Checks the macOS build (docs/MACOS.md) on an Apple silicon Mac: configures
+# the project as build_mac.sh does and builds what does not need the ROM: the
+# shaders, the Musashi generator, the unit tests (run too) and every source
+# file of the game but the one that includes the recompiled code. The Mac
+# has its own windows.h (src/platform/mac), so a change that uses a Win32
+# name it lacks builds on Windows and fails here. The game itself is never
+# linked here: its code is generated from the ROM, which is never in this
+# repository.
+name: clang on macOS
+
+on:
+  pull_request:
+    paths:
+      - CMakeLists.txt
+      - src/**
+      - tests/**
+      - third_party/**
+      - .github/workflows/clang-macos.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: CMake and Ninja
+        shell: bash
+        run: |
+          # The runner's own, else the pinned copies build_mac.sh fetches
+          if ! command -v cmake >/dev/null || ! command -v ninja >/dev/null; then
+            python3 -m venv "$RUNNER_TEMP/tools"
+            "$RUNNER_TEMP/tools/bin/pip" -q install cmake==4.4.4 ninja==1.13.2
+            echo "$RUNNER_TEMP/tools/bin" >> "$GITHUB_PATH"
+          fi
+      - name: Configure
+        shell: bash
+        run: |
+          # No generated code: the list of generated files is empty
+          mkdir -p build/gen
+          echo 'set(GEN_SOURCES "")' > build/gen/files.cmake
+          cmake -S . -B build/cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+      - name: Build what does not need the ROM
+        run: cmake --build build/cmake --target shaders m68kmake tilegen_test fnv_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test news_test achievements_csv_test disk_writer_test
+      - name: Test
+        run: ctest --test-dir build/cmake --output-on-failure
+      - name: Compile the game's own files
+        shell: bash
+        run: |
+          # Every object of the game but runtime.cpp, which includes the
+          # recompiled code's fns.h. Compiled, not linked
+          ninja -C build/cmake -t targets all |
+            sed -n 's|^\(CMakeFiles/StarWarsTrilogy\.dir/.*\.o\): .*|\1|p' |
+            grep -v '/src/runtime/runtime\.cpp\.o$' > "$RUNNER_TEMP/objects.txt"
+          grep -q 'win32_mac\.mm\.o$' "$RUNNER_TEMP/objects.txt"   # the list is the game's
+          echo "$(wc -l < "$RUNNER_TEMP/objects.txt") files"
+          xargs ninja -C build/cmake < "$RUNNER_TEMP/objects.txt"
