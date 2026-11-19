@@ -184,9 +184,9 @@ bool VkPresenter::init(const char* title, int width, int height, bool with_ngx) 
     if (!check(vkCreateWin32SurfaceKHR(instance_, &sci, nullptr, &surface_), "vkCreateWin32SurfaceKHR")) return false;
 #endif
 
-    // GPU: one with Vulkan 1.3 and a graphics queue that can present, a discrete
-    // one first; 1.2 with dynamic rendering only when no 1.3 one can present,
-    // and a software renderer only when there is nothing else
+    // GPU: one with a graphics queue that can present, Vulkan 1.3 first (a
+    // discrete one before the others), then 1.2 with dynamic rendering, and a
+    // software renderer only when there is no GPU
     auto has_extension = [](VkPhysicalDevice g, const char* name) {
         uint32_t count = 0;
         vkEnumerateDeviceExtensionProperties(g, nullptr, &count, nullptr);
@@ -220,11 +220,11 @@ bool VkPresenter::init(const char* title, int width, int height, bool with_ngx) 
             VkBool32 present = VK_FALSE;
             vkGetPhysicalDeviceSurfaceSupportKHR(g, q, surface_, &present);
             if (!(qs[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) || !present) continue;
-            // Any device with Vulkan 1.3 before any on the 1.2 route, whatever its type
-            int score = (by_extension ? 0 : 3) +
-                        (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 2
-                         : p.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU        ? 0
-                                                                              : 1);
+            // A GPU with 1.3, then a GPU on the 1.2 route (v3dv on Bookworm), then a
+            // software renderer (lavapipe, 1.3, in the same Mesa package as v3dv)
+            int score = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU
+                            ? (by_extension ? 0 : 1)
+                            : (by_extension ? 2 : 4) + (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1 : 0);
             if (score > best_score) {
                 best_score = score;
                 gpu_ = g;
