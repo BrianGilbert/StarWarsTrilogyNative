@@ -121,6 +121,12 @@ The code in this repository is under the [MIT License, with additional terms](LI
 [Controller Input Icons](https://opengameart.org/content/controller-input-icons) by ElDuderino (CC0). The game itself (ROM, code, data, music and voices) is
 not included and stays the property of its owners: you need your own copy of `swtrilgy.zip`.
 
+DLAA and DLSS use the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS), under NVIDIA's own license.
+NVIDIA's `nvngx_dlss.dll` is always downloaded from NVIDIA. The `dlss_bridge.dll` that NicoLauncher installs get
+is built from `tools/dlss_bridge` and kept, with NVIDIA's license and notice, in
+[NicoLauncher-Hub](https://github.com/snicolast/NicoLauncher-Hub/tree/main/dlss). NVIDIA, DLSS and RTX are
+trademarks of NVIDIA Corporation.
+
 **No prebuilt downloads.** The license does not allow anyone to share a compiled build of this
 port, a ROM, or anything made from one. I have never published any of them: everyone builds the
 game themselves from their own `swtrilgy.zip`. Any ready-to-play download you find elsewhere is

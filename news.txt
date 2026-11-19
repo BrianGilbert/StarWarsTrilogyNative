@@ -13,6 +13,9 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[22] 2026-11-20
+- NVIDIA RTX: DLAA now works in installs made with NicoLauncher, which until now quietly used MSAA instead. Press Update in the launcher to get it (it downloads about 60 MB from NVIDIA)
+
 [21] 2026-11-18
 - Endor: the shield bunker explosion at 16:9 no longer breaks along a diagonal line, and its sky now fills the whole width
 - ULTRA: no more stripes from the ray traced shading on walls, most visible in the throne room
