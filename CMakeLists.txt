@@ -412,8 +412,9 @@ elseif(WIN32)
 endif()
 
 # Unit tests (ctest): the 2D composition against golden hashes, the
-# command-line table, the audio queue, the ROM layout read from the zip and
-# (with Python) the ROM table, the same in rom_zip.cpp and tools/romtool.py.
+# command-line table, the audio queue, the ROM layout read from the zip,
+# the OGS-TS telemetry sender over a fake game RAM and (with Python) the ROM
+# table, the same in rom_zip.cpp and tools/romtool.py.
 # build.bat runs them.
 option(SWT_TESTS "Build the unit tests" ON)
 if(SWT_TESTS)
@@ -433,8 +434,12 @@ if(SWT_TESTS)
     add_executable(achievements_csv_test tests/achievements_csv_test.cpp src/runtime/achievements_csv.cpp src/runtime/disk_writer.cpp)
     target_include_directories(achievements_csv_test PRIVATE ${ICONS_DIR})
     add_executable(disk_writer_test tests/disk_writer_test.cpp src/runtime/disk_writer.cpp)
+    add_executable(telemetry_test tests/telemetry_test.cpp src/runtime/telemetry.cpp)
+    if(WIN32)
+        target_link_libraries(telemetry_test PRIVATE ws2_32)
+    endif()
     foreach(t tilegen_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test ${MENU_MUSIC_TEST}
-            achievements_csv_test disk_writer_test)
+            achievements_csv_test disk_writer_test telemetry_test)
         target_include_directories(${t} PRIVATE src/video src/common src/runtime src/audio src/ui ${MINIZ_DIR})
         if(MSVC)
             target_compile_options(${t} PRIVATE /W4 /utf-8)
@@ -456,6 +461,7 @@ if(SWT_TESTS)
     add_test(NAME r3d_state COMMAND r3d_state_test)
     add_test(NAME achievements_csv COMMAND achievements_csv_test)
     add_test(NAME disk_writer COMMAND disk_writer_test)
+    add_test(NAME telemetry COMMAND telemetry_test)
     if(NOT APPLE)
         add_test(NAME menu_music COMMAND menu_music_test)
     endif()
