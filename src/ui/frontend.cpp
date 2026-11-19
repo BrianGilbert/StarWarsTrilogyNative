@@ -187,6 +187,7 @@ const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_PAD_AIM, CONTROLS_TAB, L"GAMEPAD"}, {OPT_PAD_SPEED, CONTROLS_TAB}, {OPT_PAD_INVERT, CONTROLS_TAB}, {OPT_ASSIST, CONTROLS_TAB},
     {OPT_GYRO, CONTROLS_TAB, L"GYRO"}, {OPT_GYRO_SPEED, CONTROLS_TAB},
     {OPT_VIBRATION, CONTROLS_TAB, L"RUMBLE"}, {OPT_TRIGGERS, CONTROLS_TAB},
+    {OPT_TELEMETRY, CONTROLS_TAB, L"TELEMETRY"},
     {OPT_DUEL_INVERT, CONTROLS_TAB, L"DUELS"},
 };
 
@@ -422,6 +423,9 @@ std::vector<Frontend::Item> Frontend::items() const {
                  L"Xbox One / Series pads: the trigger kicks when you fire, the other when you reload (a share of VIBRATION)"},
                 {OPT_ASSIST, L"AIM ASSIST", BLOOM_LEVELS[settings.aim_assist],
                  L"With a gamepad the sight slows down over the enemy ships and follows them a little"},
+                {OPT_TELEMETRY, L"OPEN GAME STANDARDS TELEMETRY", on_off(settings.telemetry),
+                 L"Sends the craft's motion, the shield, the score and every hit you take (Open Game Standards Telemetry, UDP port " +
+                     std::to_wstring(settings.telemetry_port) + L") to haptics and motion rigs on this PC and your network"},
                 {OPT_CONNECTED, L"CONNECTED", connected,
                  gamepads.empty() ? L"No gamepad found.  Plug one in: it shows here as soon as the game sees it"
                                   : L"Found: " + gamepads,
@@ -644,6 +648,7 @@ void Frontend::activate(const Item& it, int dir) {
         push(Action::SettingsChanged);
         break;
     case OPT_ASSIST: settings.aim_assist = (settings.aim_assist + dir + 4) % 4; push(Action::SettingsChanged); break;
+    case OPT_TELEMETRY: settings.telemetry = !settings.telemetry; push(Action::SettingsChanged); break;
     case OPT_SAT:   // 0..200 % in steps of 10; a click past the top starts again from the bottom
         settings.saturation = dir > 0 && settings.saturation >= 200 && wrap_
                                   ? 0 : std::clamp(settings.saturation + 10 * dir, 0, 200);
@@ -1541,6 +1546,7 @@ void Frontend::first_value(Id id) {
     case OPT_GYRO_SPEED: s.gyro_speed = 1; break;
     case OPT_VIBRATION: s.vibration = 0; break;
     case OPT_ASSIST: s.aim_assist = 0; break;
+    case OPT_TELEMETRY: s.telemetry = true; break;
     case OPT_RT: s.ray_tracing = 0; break;
     case OPT_MENU_MUSIC: s.menu_music = true; break;
     case OPT_POINTER: s.pointer_sight = true; break;

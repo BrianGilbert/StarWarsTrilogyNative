@@ -62,7 +62,8 @@ struct FrontendSettings {
     // ORIGINAL's in its [arcade] section
     int experience = 0;
     // OGS-TS telemetry for motion rigs and haptics (runtime/telemetry.h), UDP multicast on this port.
-    // Off by default; keys of the whole game, so in the file's first section only
+    // Off by default (OPTIONS > CONTROLS > OPEN GAME STANDARDS TELEMETRY); keys of the whole
+    // game, so in the file's first section only
     bool telemetry = false;
     int telemetry_port = 40123;
 
