@@ -3,6 +3,7 @@ from the original zip, without modifying it. Writes flat binaries to data/.
 
 Usage: python tools/romtool.py <path to swtrilgy.zip> [output folder]
 """
+import io
 import os
 import sys
 import zipfile
@@ -109,19 +110,45 @@ NOTES = {
 }
 
 
+# Other Star Wars Trilogy sets that MAME knows, by the CRC of their CROM
+# chips: they are a different program, so the port cannot use them. In a split
+# set (MAME's default) a clone zip holds only its own chips, so none of the
+# shared ones are there either.
+OTHER_SETS = {
+    "the original release (swtrilgya), not Rev. A": {0x61AD51D9, 0x49B182F2, 0xBB5757BF, 0x0B9C44A0},
+    "the prototype (swtrilgyp), not Rev. A": {0x84734E94, 0xE4147534, 0x322B67A5, 0xDA7D49FA},
+}
+
+
+def missing_chips(by_crc):
+    return [name for spec in REGIONS.values() for name, crc, _ in spec["files"] if crc not in by_crc]
+
+
 def check_set(zf, by_crc):
     """Every chip of every region, before anything is written: a set with a
     chip missing must not leave a half data folder that build.bat then takes
     as extracted."""
-    missing = [name for spec in REGIONS.values() for name, crc, _ in spec["files"] if crc not in by_crc]
+    missing = missing_chips(by_crc)
     if not missing:
         return
     lines = [f"{zf.filename} is not a complete Star Wars Trilogy ROM (swtrilgy, Rev. A).",
              "Missing (looked up by CRC, so the file names in the zip do not matter):"]
     total = sum(len(spec["files"]) for spec in REGIONS.values())
-    if len(missing) > 8:
+    has_rev_a = any(crc in by_crc for _, crc, _ in REGIONS["crom"]["files"])
+    other = None if has_rev_a else next(
+        (label for label, crcs in OTHER_SETS.items() if crcs & by_crc.keys()), None)
+    if other:
+        lines[1] = f"It is {other}: a different program that this port cannot use."
+        missing = []
+    elif len(missing) > 8:
         lines[1] = f"{len(missing)} of its {total} chips are missing: this is another game or another version."
         missing = []
+        names = [info.filename for info in zf.infolist() if not info.is_dir()]
+        if names:
+            shown = ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")
+            lines.insert(2, f"The zip has {len(names)} file(s): {shown}")
+        else:
+            lines.insert(2, "The zip is empty.")
     for name in missing:
         note = NOTES.get(name)
         lines.append(f"  {name}" + (f"  ({note})" if note else ""))
@@ -129,12 +156,38 @@ def check_set(zf, by_crc):
     raise SystemExit("\n".join(lines))
 
 
+def open_set(path):
+    """The zip, or the zip inside it: some downloads wrap swtrilgy.zip in
+    another zip. Returns (zip, chips by CRC), the one with the fewest chips
+    missing."""
+    try:
+        zf = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise SystemExit(f"{path} is not a zip file (a .7z or .rar renamed?). "
+                         "Extract it and use the swtrilgy.zip that comes inside.")
+    best = (zf, load_by_crc(zf))
+    if not missing_chips(best[1]):
+        return best
+    for info in zf.infolist():
+        if not info.filename.lower().endswith(".zip"):
+            continue
+        try:
+            inner = zipfile.ZipFile(io.BytesIO(zf.read(info)))
+        except zipfile.BadZipFile:
+            continue
+        inner.filename = f"{path} > {info.filename}"
+        by_crc = load_by_crc(inner)
+        if len(missing_chips(by_crc)) < len(missing_chips(best[1])):
+            best = (inner, by_crc)
+    return best
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     outdir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "..", "data")
-    with zipfile.ZipFile(sys.argv[1]) as zf:
-        by_crc = load_by_crc(zf)
+    zf, by_crc = open_set(sys.argv[1])
+    with zf:
         check_set(zf, by_crc)
         os.makedirs(outdir, exist_ok=True)
         # crom.bin last: build.bat takes data\crom.bin as "already extracted"
