@@ -1,4 +1,4 @@
-// Window (Win32; SDL3 on macOS: src/platform/mac/vk_window_mac.cpp) + Vulkan 1.3
+// Window (Win32; SDL3 on macOS and Linux: src/platform/*/vk_window_*.cpp) + Vulkan 1.3
 // device + swapchain. Each frame calls a function that records the draw
 // commands onto the swapchain image.
 #pragma once
@@ -17,7 +17,7 @@
 #ifndef VK_USE_PLATFORM_METAL_EXT
 #define VK_USE_PLATFORM_METAL_EXT
 #endif
-#else
+#elif defined(_WIN32)   // Linux: SDL makes the surface, nothing of the window system here
 #ifndef VK_USE_PLATFORM_WIN32_KHR
 #define VK_USE_PLATFORM_WIN32_KHR
 #endif
@@ -44,6 +44,8 @@ public:
     bool ray_query() const { return ray_query_; }
     // Sampled images can sit in update-after-bind descriptor sets
     bool update_after_bind() const { return update_after_bind_; }
+    // Arrays of images indexed per polygon (partially bound, non-uniform): false on the Raspberry Pi 5
+    bool descriptor_indexing() const { return descriptor_indexing_; }
     HWND hwnd() const { return hwnd_; }
     void toggle_fullscreen();
     bool fullscreen() const { return fullscreen_; }
@@ -105,12 +107,15 @@ public:
 private:
     bool create_swapchain();
     void destroy_swapchain();
-#ifdef __APPLE__
+#ifndef _WIN32
     bool create_window(const char* title, int width, int height);
     bool load_vulkan();
     bool create_surface();
     void destroy_window();
     float wheel_ = 0;   // a trackpad's fractions of a wheel notch
+#ifndef __APPLE__
+    static std::vector<std::string> surface_extensions();   // what SDL needs for this window system
+#endif
 #else
     static LRESULT CALLBACK wndproc(HWND, UINT, WPARAM, LPARAM);
     WINDOWPLACEMENT placement_{sizeof(WINDOWPLACEMENT)};
@@ -146,6 +151,7 @@ private:
     bool present_wait_ = false;
     bool ray_query_ = false;
     bool update_after_bind_ = false;
+    bool descriptor_indexing_ = true;
     uint64_t present_id_ = 0, swapchain_first_id_ = 1;   // the first id presented to the current swapchain
     std::shared_mutex swapchain_mutex_;   // wait_present() against the swapchain being replaced
     VkBuffer capture_buffer_ = VK_NULL_HANDLE;

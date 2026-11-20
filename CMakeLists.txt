@@ -18,7 +18,9 @@ endif()
 set(GEN_DIR ${CMAKE_SOURCE_DIR}/build/gen)
 include(${GEN_DIR}/files.cmake)
 
-# glslang compiles the GLSL shaders to SPIR-V during the build (no SDK needed)
+# glslang compiles the GLSL shaders to SPIR-V during the build (no SDK needed).
+# The commands below name it (and m68kmake) as targets: when cross-compiling
+# (cmake/linux-aarch64.cmake) CMake then runs them through the emulator
 set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
 set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
 set(ENABLE_GLSLANG_BINARIES ON CACHE BOOL "" FORCE)
@@ -44,7 +46,7 @@ foreach(src ${SHADER_SOURCES})
     # in any of them rebuilds it (no list of includes to keep by hand)
     add_custom_command(OUTPUT ${out}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT}
-        COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.2 ${SHADER_DEFINES} --vn spv_${var} --depfile ${out}.d -o ${out} ${src}
+        COMMAND glslang-standalone -V --target-env vulkan1.2 ${SHADER_DEFINES} --vn spv_${var} --depfile ${out}.d -o ${out} ${src}
         DEPENDS ${src} glslang-standalone
         DEPFILE ${out}.d
         COMMENT "Shader ${name}")
@@ -56,7 +58,7 @@ foreach(name r3d ao)
     set(out ${SHADER_OUT}/${name}_rt.frag.h)
     add_custom_command(OUTPUT ${out}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT}
-        COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.2 ${SHADER_DEFINES} -DRAY_TRACING --vn spv_${name}_rt_frag --depfile ${out}.d -o ${out} ${SHADER_DIR}/${name}.frag
+        COMMAND glslang-standalone -V --target-env vulkan1.2 ${SHADER_DEFINES} -DRAY_TRACING --vn spv_${name}_rt_frag --depfile ${out}.d -o ${out} ${SHADER_DIR}/${name}.frag
         DEPENDS ${SHADER_DIR}/${name}.frag glslang-standalone
         DEPFILE ${out}.d
         COMMENT "Shader ${name}.frag (ray tracing)")
@@ -68,17 +70,29 @@ foreach(name r3d compose)
     set(out ${SHADER_OUT}/${name}_few.frag.h)
     add_custom_command(OUTPUT ${out}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT}
-        COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.2 ${SHADER_DEFINES} -DFEW_IMAGES --vn spv_${name}_few_frag --depfile ${out}.d -o ${out} ${SHADER_DIR}/${name}.frag
+        COMMAND glslang-standalone -V --target-env vulkan1.2 ${SHADER_DEFINES} -DFEW_IMAGES --vn spv_${name}_few_frag --depfile ${out}.d -o ${out} ${SHADER_DIR}/${name}.frag
         DEPENDS ${SHADER_DIR}/${name}.frag glslang-standalone
         DEPFILE ${out}.d
         COMMENT "Shader ${name}.frag (few images)")
     list(APPEND SHADER_HEADERS ${out})
 endforeach()
+# Again with one picture per array and no descriptor indexing, for GPUs
+# without it (Mesa's v3dv, the Raspberry Pi 5): r3d_plain.frag.h, compose_plain.frag.h
+foreach(name r3d compose)
+    set(out ${SHADER_OUT}/${name}_plain.frag.h)
+    add_custom_command(OUTPUT ${out}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT}
+        COMMAND glslang-standalone -V --target-env vulkan1.2 ${SHADER_DEFINES} -DFEW_IMAGES -DNO_INDEXING --vn spv_${name}_plain_frag --depfile ${out}.d -o ${out} ${SHADER_DIR}/${name}.frag
+        DEPENDS ${SHADER_DIR}/${name}.frag glslang-standalone
+        DEPFILE ${out}.d
+        COMMENT "Shader ${name}.frag (no descriptor indexing)")
+    list(APPEND SHADER_HEADERS ${out})
+endforeach()
 add_custom_target(shaders DEPENDS ${SHADER_HEADERS})
 
 # SDL3, for the gamepads only (no window, sound or rendering of its own; on
-# macOS the window, the mouse and keyboard and the sound too): downloaded once
-# at configure time and linked statically
+# macOS and Linux the window, the mouse and keyboard and the sound too):
+# downloaded once at configure time and linked statically
 include(FetchContent)
 # SDL3 and miniz (third_party/deps.txt: file, URL, SHA256). build.bat downloads
 # them first into third_party/downloads (tools/get_deps.bat, with retries); a
@@ -103,7 +117,7 @@ set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
 set(SDL_UNUSED GPU RENDER CAMERA POWER DIALOG TRAY)
-if(NOT APPLE)
+if(WIN32)
     list(APPEND SDL_UNUSED AUDIO VIDEO)
 endif()
 foreach(sub ${SDL_UNUSED})
@@ -145,6 +159,27 @@ if(APPLE)
     set(MOLTENVK_DYLIB ${moltenvk_SOURCE_DIR}/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib)
 endif()
 
+# FreeType, GDI's text on Linux (src/platform/linux/win32_linux.cpp):
+# downloaded once at configure time and built into the program, with none of
+# the libraries it can use (the game's fonts are plain TrueType), so the game
+# does not depend on the system's
+if(UNIX AND NOT APPLE)
+    foreach(lib ZLIB BZIP2 PNG HARFBUZZ BROTLI)
+        set(FT_DISABLE_${lib} ON CACHE BOOL "" FORCE)
+    endforeach()
+    set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+    set(FREETYPE_URL https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz)
+    if(EXISTS ${CMAKE_SOURCE_DIR}/third_party/downloads/freetype-2.13.3.tar.xz)   # saved there by hand, as the others
+        set(FREETYPE_URL ${CMAKE_SOURCE_DIR}/third_party/downloads/freetype-2.13.3.tar.xz)
+    endif()
+    FetchContent_Declare(freetype
+        URL ${FREETYPE_URL}
+        URL_HASH SHA256=0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        EXCLUDE_FROM_ALL)
+    FetchContent_MakeAvailable(freetype)
+endif()
+
 # Musashi (68000 of the sound board): m68kmake generates the opcode tables
 set(MUSASHI_DIR ${CMAKE_SOURCE_DIR}/third_party/musashi)
 set(MUSASHI_GEN ${CMAKE_BINARY_DIR}/musashi)
@@ -155,7 +190,7 @@ if(MSVC)
 endif()
 add_custom_command(OUTPUT ${MUSASHI_GEN}/m68kops.c ${MUSASHI_GEN}/m68kops.h
     COMMAND ${CMAKE_COMMAND} -E make_directory ${MUSASHI_GEN}
-    COMMAND $<TARGET_FILE:m68kmake> ${MUSASHI_GEN} ${MUSASHI_DIR}/m68k_in.c
+    COMMAND m68kmake ${MUSASHI_GEN} ${MUSASHI_DIR}/m68k_in.c
     DEPENDS m68kmake ${MUSASHI_DIR}/m68k_in.c
     COMMENT "Musashi opcode tables")
 
@@ -183,7 +218,7 @@ endforeach()
 if(WIN32 AND (DLSS_BRIDGE OR NOT MSVC))
     set(DLSS_SOURCE src/video/dlss_loader.cpp)
     set(DLSS_LIB "")
-elseif(NGX_OK)
+elseif(NGX_OK AND WIN32)   # the SDK's .lib: Windows only
     set(DLSS_SOURCE src/video/dlss.cpp)
     set(DLSS_LIB ${CMAKE_SOURCE_DIR}/third_party/ngx/lib/nvsdk_ngx_d.lib)
 else()
@@ -194,9 +229,22 @@ else()
     set(DLSS_LIB "")
 endif()
 
-# What each system does in its own way
+# What each system does in its own way. Linux shares the Mac's Win32 names
+# (src/platform/mac: windows.h, compat.h, SDL3 sound and mice) and has its own
+# window, text, pictures and splash video (src/platform/linux)
 set(MAC_DIR ${CMAKE_SOURCE_DIR}/src/platform/mac)
-if(APPLE)
+set(LINUX_DIR ${CMAKE_SOURCE_DIR}/src/platform/linux)
+if(UNIX AND NOT APPLE)
+    set(PLATFORM_SOURCES
+        ${LINUX_DIR}/win32_linux.cpp
+        ${LINUX_DIR}/vk_window_linux.cpp
+        ${LINUX_DIR}/image_io_linux.cpp
+        ${LINUX_DIR}/splash_video_linux.cpp
+        ${MAC_DIR}/raw_mice_mac.cpp
+        ${MAC_DIR}/audio_out_mac.cpp
+        src/video/dlss_stub.cpp
+        src/ui/menu_music.cpp)
+elseif(APPLE)
     set(PLATFORM_SOURCES
         ${MAC_DIR}/win32_mac.mm
         ${MAC_DIR}/vk_window_mac.cpp
@@ -323,6 +371,14 @@ if(APPLE)
         $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     add_custom_command(TARGET StarWarsTrilogy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MOLTENVK_DYLIB} $<TARGET_FILE_DIR:StarWarsTrilogy>/libMoltenVK.dylib)
+elseif(UNIX)
+    # Linux (x86_64, arm64): the Mac's Win32 names in every file, as there. As
+    # MSVC builds it: a*b+c stays two operations, memory of any type can be read
+    # as any other, integers wrap around, and char is signed (it is not on arm64)
+    target_include_directories(StarWarsTrilogy PRIVATE ${MAC_DIR} ${LINUX_DIR} src/audio src/ui third_party/stb)
+    target_compile_options(StarWarsTrilogy PRIVATE -ffp-contract=off -fno-strict-aliasing -fwrapv -fsigned-char
+        "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include \"${MAC_DIR}/compat.h\">")
+    target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static freetype ${CMAKE_DL_LIBS} pthread)
 else()
     target_compile_definitions(StarWarsTrilogy PRIVATE VK_USE_PLATFORM_WIN32_KHR)
     target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static winmm ole32 oleaut32 windowscodecs mfplat mfuuid gdi32 dwmapi shell32 winhttp
@@ -380,9 +436,12 @@ if(LW_TESTS)
             target_compile_options(${t} PRIVATE /W4 /utf-8)
             target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS)
         endif()
-        if(APPLE)
+        if(NOT WIN32)
             target_compile_options(${t} PRIVATE -include ${MAC_DIR}/compat.h)
             target_include_directories(${t} PRIVATE ${MAC_DIR})
+        endif()
+        if(UNIX AND NOT APPLE)
+            target_compile_options(${t} PRIVATE -fsigned-char)
         endif()
     endforeach()
     add_test(NAME tilegen COMMAND tilegen_test ${CMAKE_SOURCE_DIR}/tests/tilegen_expected.txt)
@@ -398,10 +457,11 @@ if(LW_TESTS)
     if(NOT APPLE)
         add_test(NAME menu_music COMMAND menu_music_test)
     endif()
-    # 3.10: the version the tools need, so an older Python in PATH is skipped (issue #51)
+    # 3.10: the version the tools need, so an older Python in PATH is skipped (issue #51).
+    # By its path: as a target, a cross build would run it through the emulator
     find_package(Python3 3.10 COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
-        add_test(NAME fnv_python COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tests/fnv_test.py
+        add_test(NAME fnv_python COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/fnv_test.py
                  ${CMAKE_SOURCE_DIR}/tests/fnv_expected.txt)
     endif()
 endif()
