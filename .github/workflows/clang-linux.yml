@@ -1,0 +1,62 @@
+# Checks the Linux build (docs/LINUX.md) on x86_64 and arm64: configures the
+# project as build_linux.sh does and builds what does not need the ROM: the
+# shaders, the Musashi generator, the unit tests (run too) and every source
+# file of the game but the one that includes the recompiled code. Linux has
+# the Mac's windows.h (src/platform/mac) and its own window, text and
+# pictures (src/platform/linux), so a change that uses a Win32 name they lack
+# builds on Windows and fails here. arm64 runs on an arm64 runner: char is
+# unsigned there, as on the Raspberry Pi. The game itself is never linked
+# here: its code is generated from the ROM, which is never in this
+# repository.
+name: clang on Linux
+
+on:
+  pull_request:
+    paths:
+      - CMakeLists.txt
+      - cmake/**
+      - src/**
+      - tests/**
+      - third_party/**
+      - .github/workflows/clang-linux.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: What SDL3 needs (docs/LINUX.md)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clang ninja-build pkg-config \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev \
+            libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev libegl-dev \
+            libpulse-dev libpipewire-0.3-dev libasound2-dev libudev-dev libdbus-1-dev
+      - name: Configure
+        run: |
+          # No generated code: the list of generated files is empty
+          mkdir -p build/gen
+          echo 'set(GEN_SOURCES "")' > build/gen/files.cmake
+          cmake -S . -B build/cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+      - name: Build what does not need the ROM
+        run: cmake --build build/cmake --target shaders m68kmake tilegen_test fnv_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test news_test menu_music_test achievements_csv_test disk_writer_test
+      - name: Test
+        run: ctest --test-dir build/cmake --output-on-failure
+      - name: Compile the game's own files
+        run: |
+          # Every object of the game but runtime.cpp, which includes the
+          # recompiled code's fns.h. Compiled, not linked
+          ninja -C build/cmake -t targets all |
+            sed -n 's|^\(CMakeFiles/StarWarsTrilogy\.dir/.*\.o\): .*|\1|p' |
+            grep -v '/src/runtime/runtime\.cpp\.o$' > "$RUNNER_TEMP/objects.txt"
+          grep -q 'win32_linux\.cpp\.o$' "$RUNNER_TEMP/objects.txt"   # the list is the game's
+          echo "$(wc -l < "$RUNNER_TEMP/objects.txt") files"
+          xargs ninja -C build/cmake < "$RUNNER_TEMP/objects.txt"
