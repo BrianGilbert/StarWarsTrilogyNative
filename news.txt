@@ -13,6 +13,11 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[23] 2026-11-21
+- Linux: the game now builds and runs on Linux too, on PCs (x86_64) and arm64 boards such as the Raspberry Pi 5, thanks to vojenfr (steps in docs/LINUX.md)
+- Windows: small renderer start-up changes shared with the Linux version, nothing else changes
+- Installing: with the wrong swtrilgy.zip the build now says which set it is (the original release or the prototype instead of Rev. A), and a swtrilgy.zip inside another zip is used as it is
+
 [22] 2026-11-20
 - NVIDIA RTX: DLAA now works in installs made with NicoLauncher, which until now quietly used MSAA instead. Press Update in the launcher to get it (it downloads about 60 MB from NVIDIA)
 
