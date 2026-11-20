@@ -2,7 +2,8 @@
 
 <p align="center">
   <b>An unofficial, fan-made recompilation of the 1998 arcade game Star Wars Trilogy Arcade.</b><br>
-  Not an emulator: the original program, recompiled to C++ on your own PC from your own copy, with a modern Vulkan renderer.
+  Not an emulator: the original program, recompiled to C++ on your own PC from your own copy, with a modern Vulkan renderer.<br>
+  For Windows PC, Mac (Apple silicon) and Linux.
 </p>
 
 > [!IMPORTANT]
@@ -72,15 +73,20 @@ downloads, builds, updates and starts the game for you. No Visual Studio, nothin
 2. In the launcher, open **Star Wars Trilogy**, press **Install** and choose your `swtrilgy.zip` when it asks.
 3. Press **Play**.
 
-On a Mac with Apple silicon, see [docs/MACOS.md](docs/MACOS.md) (maintained by contributors).
+On a Mac with Apple silicon, see [docs/MACOS.md](docs/MACOS.md); on Linux (x86_64 or arm64, Raspberry Pi 5 too),
+see [docs/LINUX.md](docs/LINUX.md). Both are maintained by contributors.
 
 ### Update
 
-With NicoLauncher: it tells you when there is something new. Press **Update**.
+With NicoLauncher: it tells you when there is something new. Press **Update**. This is always the stable version.
 
 Without it: when there is a new version, the main menu says what is new and offers **UPDATE NOW**. Or run
 `update.bat` yourself: it downloads the changed files from GitHub (no git needed) and rebuilds.
 Your ROM, settings and records are kept; files you edited are backed up to `out\update_backup\`.
+
+> [!NOTE]
+> `update.bat` installs the latest changes merged on GitHub, as soon as they are merged, so the game
+> can be unstable at times. The stable version is always the one NicoLauncher installs.
 
 ## Controls
 
