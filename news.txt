@@ -13,6 +13,9 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[24] 2026-11-21
+- Fire, explosions and the glow around lights: no more grain over them or noisy edges when AMBIENT OCCLUSION and SOFT PARTICLES are on
+
 [23] 2026-11-21
 - Linux: the game now builds and runs on Linux too, on PCs (x86_64) and arm64 boards such as the Raspberry Pi 5, thanks to vojenfr (steps in docs/LINUX.md)
 - Windows: small renderer start-up changes shared with the Linux version, nothing else changes
