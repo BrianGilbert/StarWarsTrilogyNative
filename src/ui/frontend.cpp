@@ -129,7 +129,7 @@ const int WEIGHTS[6] = {FW_BOLD, FW_BOLD, FW_NORMAL, FW_SEMIBOLD, FW_MEDIUM, FW_
 // ---- Settings file ----
 
 // settings.ini's words for FrontendSettings::aspect
-static const char* const ASPECT_WORDS[] = {"4:3", "16:9", "21:9", "32:9", "48:9"};
+static const char* const ASPECT_WORDS[] = {"4:3", "16:9", "21:9", "32:9", "48:9", "auto"};
 static constexpr int ASPECT_COUNT = int(std::size(ASPECT_WORDS));
 
 void FrontendSettings::load(const char* path) {
@@ -460,13 +460,14 @@ std::vector<Frontend::Item> Frontend::items() const {
         wchar_t gamma_text[16];
         swprintf(gamma_text, 16, L"%.2f", settings.gamma / 100.0);
         static const wchar_t* const RT_MODES[3] = {L"OFF", L"SHADOWS", L"SHADOWS + AO"};
-        static const wchar_t* const ASPECT_NAMES[5] = {L"4:3 (ORIGINAL)", L"16:9", L"21:9", L"32:9", L"48:9"};
-        static const wchar_t* const ASPECT_HINTS[5] = {
+        static const wchar_t* const ASPECT_NAMES[6] = {L"4:3 (ORIGINAL)", L"16:9", L"21:9", L"32:9", L"48:9", L"AUTO"};
+        static const wchar_t* const ASPECT_HINTS[6] = {
             L"The arcade's own 4:3 picture, with bars at the sides",
             L"Widest 3D view 16:9.  Narrower windows show less, never stretched",
             L"Widest 3D view 21:9: fills ultrawide monitors (2560x1080, 3440x1440)",
             L"Widest 3D view 32:9: fills super ultrawide monitors (3840x1080, 5120x1440)",
-            L"Widest 3D view 48:9: fills three monitors side by side (5760x1080, 7680x1440)"};
+            L"Widest 3D view 48:9: fills three monitors side by side (5760x1080, 7680x1440)",
+            L"The 3D view fills the window, whatever its shape (up to 48:9)"};
         static const wchar_t* const RT_HINTS[3] = {
             L"Shadows from a shadow map and occlusion from the depth, as without ray tracing",
             L"Sun shadows traced through the world: every ship, walker and tree, soft with distance",
@@ -707,7 +708,7 @@ void Frontend::activate(const Item& it, int dir) {
         settings.music = dir > 0 && settings.music == 10 && wrap_ ? 0 : std::clamp(settings.music + dir, 0, 10);
         push(Action::SettingsChanged);
         break;
-    case OPT_ASPECT: settings.aspect = (settings.aspect + dir + 5) % 5; push(Action::SettingsChanged); break;
+    case OPT_ASPECT: settings.aspect = (settings.aspect + dir + ASPECT_COUNT) % ASPECT_COUNT; push(Action::SettingsChanged); break;
     case OPT_UPDATES: settings.check_updates = !settings.check_updates; push(Action::SettingsChanged); break;
     case OPT_MENU_MUSIC: settings.menu_music = !settings.menu_music; push(Action::SettingsChanged); break;
     case OPT_SPEAKERS: settings.speakers = (settings.speakers + dir + 3) % 3; push(Action::SettingsChanged); break;

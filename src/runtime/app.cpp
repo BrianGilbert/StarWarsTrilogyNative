@@ -300,9 +300,9 @@ int main(int argc, char** argv) {
     // Window: the game runs on its own thread at real speed; this thread draws
     // the latest image at the monitor's refresh rate (vsync)
     VkPresenter presenter;
-    // The window as wide as the 3D view, but within the screen (32:9 and
-    // 48:9 are for fullscreen on very wide monitors)
-    int window_w = int(SCREEN_H * 2 * std::max(g_opt.max_aspect, 4.0f / 3.0f));
+    // The window as wide as the 3D view, but within the screen and no wider
+    // than 21:9 (32:9, 48:9 and AUTO are for full screen on very wide monitors)
+    int window_w = int(SCREEN_H * 2 * std::clamp(g_opt.max_aspect, 4.0f / 3.0f, 2.4f));
     if (RECT work; SystemParametersInfoA(SPI_GETWORKAREA, 0, &work, 0))
         window_w = std::max(SCREEN_W * 2, std::min(window_w, int(work.right - work.left) - 64));
     if (!presenter.init("Star Wars Trilogy Native by snicolast", window_w, SCREEN_H * 2, g_opt.dlaa)) {
@@ -1023,7 +1023,7 @@ int main(int argc, char** argv) {
                     frontend.invalidate();
                     break;
                 case Frontend::Action::SettingsChanged:
-                    if (aspect_level(g_opt.max_aspect) != s.aspect)   // an --aspect between the levels stays until changed
+                    if (aspect_level(g_opt.max_aspect) != aspect_level_of(s.aspect))   // an --aspect between the levels stays until changed
                         renderer.set_max_aspect(g_opt.max_aspect = MAX_ASPECT[s.aspect]);
                     g_sound.set_volume(float(s.volume));
                     g_sound.set_music_gain(float(s.music));
