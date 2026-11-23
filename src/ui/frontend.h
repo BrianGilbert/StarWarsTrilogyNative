@@ -11,17 +11,13 @@
 #define NOMINMAX
 #include <windows.h>
 
-#include <atomic>
 #include <cstdint>
 #include <map>
-#include <memory>
-#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "../runtime/stats.h"
-#include "news.h"
 #include "splash_video.h"
 
 struct FrontendSettings {
@@ -68,8 +64,6 @@ struct FrontendSettings {
     bool menu_music = true; // the game's Main Title in the menus
     int sight_size = 80;    // the game's sight drawn at this size, % (Star Wars Trilogy)
     bool pointer_sight = true; // the sight goes where the mouse / light gun points (false: the mouse is the lever)
-    bool check_updates = true;     // at launch, news.txt on GitHub: a window with what is new and UPDATE NOW
-    int news_seen = 0;             // the newest news.txt entry the player closed with LATER
     // EXPERIENCE (the file's first section only): 0 PC EDITION, 1 ARCADE ORIGINAL. Each
     // experience keeps its own settings: PC EDITION's at the top of the file, ARCADE
     // ORIGINAL's in its [arcade] section
@@ -136,12 +130,6 @@ public:
     int client_w = 0, client_h = 0, desktop_w = 0, desktop_h = 0;   // the window's inside, the desktop (app.cpp)
     int refresh_hz = 60;                            // the monitor's (MAX FPS MONITOR)
 
-    // At launch: news.txt from GitHub in the background (when the settings
-    // allow it). An entry newer than the news.txt here and than the last one
-    // closed with LATER opens a window over the main menu listing every entry
-    // this version lacks (see news.h)
-    void check_for_news();
-
     // DEBUG (Star Wars Trilogy): straight to a phase of a stage. StartDebug
     // reads debug_choice = stage * 4 + phase (runtime.cpp, debug jumps)
     int debug_choice = -1;
@@ -161,7 +149,7 @@ private:
         PAUSE_QUIT, PAUSE_RESTORE, PC_EDITION,   // ARCADE ORIGINAL's pause: QUIT GAME, RESTORE ORIGINAL, BACK TO PC EDITION
         // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
         OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
-        OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
+        OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_SCALE,
         OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION, OPT_VSYNC, OPT_MAXFPS, OPT_BGFPS, OPT_TRIGGERS,
         OPT_EXPERIENCE, OPT_ARCADE_ASPECT,
     };
@@ -277,27 +265,6 @@ private:
     void drop_pick(int i);
     bool drop_key(int vk);
     void draw_drop();
-    // UPDATE AVAILABLE: the window over the main menu with the entries of
-    // news.txt this version lacks. UPDATE NOW starts update.bat (it waits for the game to close,
-    // updates, rebuilds and starts it again) and closes the game; LATER (Esc)
-    // keeps it closed until a newer entry
-    struct NewsDownload {                  // shared with the thread that downloads it (left to finish on its own)
-        std::mutex mutex;
-        std::string text;                  // news.txt from GitHub
-        std::atomic<int> state{0};         // 0 downloading, 1 there, 2 failed, 3 taken (take_news)
-    };
-    std::shared_ptr<NewsDownload> news_download_;
-    std::vector<NewsEntry> news_;          // the entries shown
-    int news_latest_ = 0;                  // the newest one on GitHub
-    bool news_open_ = false;
-    int news_button_ = 0;                  // 0 UPDATE NOW, 1 LATER
-    int news_hot_ = -1;                    // the button under the pointer
-    RECT news_buttons_[2]{};
-    void take_news();                      // the download, once it is there
-    void draw_news();
-    bool news_key(int vk);
-    void news_choose(int button);
-    void start_update();
 
     // The splash screens: their pictures, which one is on and since when
     std::vector<Picture> splash_;

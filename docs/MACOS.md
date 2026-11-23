@@ -25,7 +25,7 @@ without that folder, but its program is compiled from the ROM's code, so keep it
   the depth instead.
 - No DLAA: MSAA 8x by default, and **Options > Display > Render scale** above 100 % for smoother still, on a fast Mac.
 - One mouse: a second player uses a gamepad.
-- UPDATE NOW opens the game's page instead of updating by itself.
+- No `update.bat`: to update, update the folder (`git pull`) and run `./build_mac.sh` again.
 
 Option+Return, Cmd+Return or F11 switch between the window and full screen (**Options > Display > Mode**). On most Mac keyboards the function keys need Fn held.
 

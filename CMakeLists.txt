@@ -298,7 +298,6 @@ add_executable(StarWarsTrilogy WIN32
     src/video/vk_presenter.cpp
     src/video/ui_overlay.cpp
     src/ui/frontend.cpp
-    src/ui/news.cpp
     src/video/r3d_state.cpp
     src/video/r3d_scene.cpp
     src/video/r3d_screen.cpp
@@ -383,7 +382,7 @@ elseif(UNIX)
     target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static freetype ${CMAKE_DL_LIBS} pthread)
 else()
     target_compile_definitions(StarWarsTrilogy PRIVATE VK_USE_PLATFORM_WIN32_KHR)
-    target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static winmm ole32 oleaut32 windowscodecs mfplat mfuuid gdi32 dwmapi shell32 winhttp
+    target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static winmm ole32 oleaut32 windowscodecs mfplat mfuuid gdi32 dwmapi shell32
         ${DLSS_LIB})
 endif()
 
@@ -421,7 +420,6 @@ if(LW_TESTS)
     add_executable(rom_zip_test tests/rom_zip_test.cpp src/runtime/rom_zip.cpp ${MINIZ_DIR}/miniz.c)
     add_executable(jtag_test tests/jtag_test.cpp src/runtime/jtag.cpp)
     add_executable(r3d_state_test tests/r3d_state_test.cpp)
-    add_executable(news_test tests/news_test.cpp src/ui/news.cpp)
     set(MENU_MUSIC_TEST "")
     if(NOT APPLE)   # the Mac plays the menus' music with its own player
         add_executable(menu_music_test tests/menu_music_test.cpp src/ui/menu_music.cpp)
@@ -431,7 +429,7 @@ if(LW_TESTS)
     add_executable(achievements_csv_test tests/achievements_csv_test.cpp src/runtime/achievements_csv.cpp src/runtime/disk_writer.cpp)
     target_include_directories(achievements_csv_test PRIVATE ${ICONS_DIR})
     add_executable(disk_writer_test tests/disk_writer_test.cpp src/runtime/disk_writer.cpp)
-    foreach(t tilegen_test fnv_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test news_test ${MENU_MUSIC_TEST}
+    foreach(t tilegen_test fnv_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test ${MENU_MUSIC_TEST}
             achievements_csv_test disk_writer_test)
         target_include_directories(${t} PRIVATE src/video src/common src/runtime src/audio src/ui ${MINIZ_DIR})
         if(MSVC)
@@ -453,7 +451,6 @@ if(LW_TESTS)
     add_test(NAME rom_zip COMMAND rom_zip_test)
     add_test(NAME jtag COMMAND jtag_test)
     add_test(NAME r3d_state COMMAND r3d_state_test)
-    add_test(NAME news COMMAND news_test)
     add_test(NAME achievements_csv COMMAND achievements_csv_test)
     add_test(NAME disk_writer COMMAND disk_writer_test)
     if(NOT APPLE)

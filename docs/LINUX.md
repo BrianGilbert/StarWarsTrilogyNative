@@ -23,8 +23,7 @@ libxkbcommon wayland wayland-protocols libdecor libpulse pipewire alsa-lib syste
    and leaves `StarWarsTrilogy` in the folder.
 3. Play with `./StarWarsTrilogy`, from this folder or anywhere else (it goes to its own folder).
 
-Settings, records and saves are kept in the folder, as on Windows. The check for updates uses the system's libcurl
-when there is one (`libcurl.so.4`); without it the game plays the same.
+Settings, records and saves are kept in the folder, as on Windows.
 
 ## arm64 from an x86_64 PC
 
@@ -66,7 +65,7 @@ The arm64 build is made with the Raspberry Pi 5 in mind (built on it with `./bui
   3D larger and scales it down, for smoother edges still on a fast GPU (below 100 %: faster).
 - No splash video: the splash picture shows in its place.
 - One mouse: a second player uses a gamepad.
-- UPDATE NOW opens the game's page: update the folder (`git pull`) and run `build_linux.sh` again.
+- No `update.bat`: to update, update the folder (`git pull`) and run `./build_linux.sh` again.
 
 F11 or Alt+Enter switches between the window and full screen (**Options > Display > Mode**).
 

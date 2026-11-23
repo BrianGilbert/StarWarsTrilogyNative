@@ -1,7 +1,6 @@
 // What windows.h (src/platform/mac/windows.h) declares, on Linux. Files,
 // threads and clocks are POSIX as on macOS; GDI's text is FreeType (built into
-// the program), the achievement's sound SDL3 and the news download the
-// system's libcurl, loaded when it is there.
+// the program), the achievement's sound SDL3.
 #include "windows.h"
 
 #include <SDL3/SDL.h>
@@ -10,7 +9,6 @@
 #include FT_TRUETYPE_TABLES_H
 
 #include <dirent.h>
-#include <dlfcn.h>
 #include <fnmatch.h>
 #include <pthread.h>
 #include <sys/stat.h>
@@ -278,12 +276,6 @@ int MessageBoxA(HWND hwnd, const char* text, const char* title, UINT) {
     return 1;
 }
 
-INT_PTR ShellExecuteW(HWND, const wchar_t*, const wchar_t* file, const wchar_t*, const wchar_t*, int) {
-    std::string url = narrow(file);
-    if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0) return 0;
-    return SDL_OpenURL(url.c_str()) ? 33 : 0;   // above 32: it worked
-}
-
 // ---- Fonts: FreeType in place of GDI ----
 namespace {
 
@@ -496,74 +488,3 @@ BOOL PlaySoundW(const wchar_t* sound, void*, DWORD) {
     return ok;
 }
 
-// ---- Web ----
-// The system's libcurl, loaded when the news are first asked for: the game
-// needs none of its development files to build, and starts without it (no
-// UPDATE AVAILABLE then). Its option numbers are part of its ABI (curl/curl.h)
-namespace {
-struct Curl {
-    void* (*easy_init)() = nullptr;
-    int (*easy_setopt)(void*, int, ...) = nullptr;
-    int (*easy_perform)(void*) = nullptr;
-    int (*easy_getinfo)(void*, int, ...) = nullptr;
-    void (*easy_cleanup)(void*) = nullptr;
-    bool ok = false;
-};
-enum {
-    CURLOPT_WRITEDATA = 10001, CURLOPT_URL = 10002, CURLOPT_USERAGENT = 10018, CURLOPT_WRITEFUNCTION = 20011,
-    CURLOPT_TIMEOUT = 13, CURLOPT_FOLLOWLOCATION = 52, CURLOPT_CONNECTTIMEOUT = 78, CURLOPT_NOSIGNAL = 99,
-    CURLINFO_RESPONSE_CODE = 0x200000 + 2,
-};
-
-const Curl& curl() {
-    static const Curl c = [] {
-        Curl c;
-        void* lib = nullptr;
-        for (const char* name : {"libcurl.so.4", "libcurl-gnutls.so.4"})
-            if ((lib = dlopen(name, RTLD_NOW | RTLD_LOCAL))) break;
-        if (!lib) {
-            printf("[menu] libcurl not found: no check for updates\n");
-            return c;
-        }
-        auto sym = [lib](const char* name) { return dlsym(lib, name); };
-        auto global_init = reinterpret_cast<int (*)(long)>(sym("curl_global_init"));
-        c.easy_init = reinterpret_cast<void* (*)()>(sym("curl_easy_init"));
-        c.easy_setopt = reinterpret_cast<int (*)(void*, int, ...)>(sym("curl_easy_setopt"));
-        c.easy_perform = reinterpret_cast<int (*)(void*)>(sym("curl_easy_perform"));
-        c.easy_getinfo = reinterpret_cast<int (*)(void*, int, ...)>(sym("curl_easy_getinfo"));
-        c.easy_cleanup = reinterpret_cast<void (*)(void*)>(sym("curl_easy_cleanup"));
-        c.ok = global_init && c.easy_init && c.easy_setopt && c.easy_perform && c.easy_getinfo && c.easy_cleanup &&
-               global_init(3) == 0;   // CURL_GLOBAL_DEFAULT
-        return c;
-    }();
-    return c;
-}
-
-size_t keep(char* data, size_t size, size_t n, void* user) {
-    auto* body = static_cast<std::string*>(user);
-    if (body->size() + size * n > 256 * 1024) return 0;   // too long: fails the transfer
-    body->append(data, size * n);
-    return size * n;
-}
-}  // namespace
-
-bool mac_https_get(const wchar_t* host, const wchar_t* path, std::string& body) {
-    body.clear();
-    const Curl& c = curl();
-    void* h = c.ok ? c.easy_init() : nullptr;
-    if (!h) return false;
-    std::string url = "https://" + narrow(host) + narrow(path);
-    c.easy_setopt(h, CURLOPT_URL, url.c_str());
-    c.easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
-    c.easy_setopt(h, CURLOPT_CONNECTTIMEOUT, 4L);
-    c.easy_setopt(h, CURLOPT_TIMEOUT, 8L);
-    c.easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
-    c.easy_setopt(h, CURLOPT_USERAGENT, "StarWarsTrilogyNative");
-    c.easy_setopt(h, CURLOPT_WRITEFUNCTION, &keep);
-    c.easy_setopt(h, CURLOPT_WRITEDATA, &body);
-    long status = 0;
-    bool ok = c.easy_perform(h) == 0 && c.easy_getinfo(h, CURLINFO_RESPONSE_CODE, &status) == 0 && status == 200;
-    c.easy_cleanup(h);
-    if (!ok) body.clear();
-    return ok;
-}

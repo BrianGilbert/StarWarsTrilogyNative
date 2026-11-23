@@ -294,12 +294,6 @@ int MessageBoxA(HWND hwnd, const char* text, const char* title, UINT) {
     return 1;
 }
 
-INT_PTR ShellExecuteW(HWND, const wchar_t*, const wchar_t* file, const wchar_t*, const wchar_t*, int) {
-    std::string url = narrow(file);
-    if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0) return 0;
-    return SDL_OpenURL(url.c_str()) ? 33 : 0;   // above 32: it worked
-}
-
 // ---- Fonts: Core Text in place of GDI ----
 namespace {
 
@@ -498,31 +492,3 @@ BOOL PlaySoundW(const wchar_t* sound, void*, DWORD) {
     }
 }
 
-// ---- Web ----
-bool mac_https_get(const wchar_t* host, const wchar_t* path, std::string& body) {
-    body.clear();
-    @autoreleasepool {
-        NSString* address = [NSString stringWithFormat:@"https://%s%s", narrow(host).c_str(), narrow(path).c_str()];
-        NSURLSessionConfiguration* config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-        config.timeoutIntervalForRequest = 4;
-        config.timeoutIntervalForResource = 8;
-        NSURLSession* session = [NSURLSession sessionWithConfiguration:config];
-        dispatch_semaphore_t done = dispatch_semaphore_create(0);
-        __block bool ok = false;
-        __block std::string received;
-        NSURLSessionDataTask* task = [session dataTaskWithURL:[NSURL URLWithString:address]
-                                            completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
-            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]] ? ((NSHTTPURLResponse*)response).statusCode : 0;
-            if (!error && status == 200 && data.length <= 256 * 1024) {
-                received.assign(static_cast<const char*>(data.bytes), data.length);
-                ok = true;
-            }
-            dispatch_semaphore_signal(done);
-        }];
-        [task resume];
-        dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
-        [session finishTasksAndInvalidate];
-        body = received;
-        return ok;
-    }
-}
