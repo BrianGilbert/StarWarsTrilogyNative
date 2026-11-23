@@ -136,12 +136,18 @@ void FrontendSettings::load(const char* path) {
     FILE* f = fopen(path, "r");
     if (!f) return;
     char line[512];
+    int old_fullscreen = -1;   // an older file's fullscreen = 1: the borderless one, unless display_mode is there
+    bool mode_saved = false;
     while (fgets(line, sizeof(line), f)) {
         char key[64], value[64];
         if (sscanf(line, " %63[^= ] = %63s", key, value) != 2) continue;
         std::string k = key, v = value;
         bool on = v == "1" || v == "on" || v == "true";
-        if (k == "fullscreen") fullscreen = on;
+        if (k == "fullscreen") old_fullscreen = on;
+        else if (k == "display_mode") display_mode = v == "fullscreen" ? 2 : v == "borderless" ? 1 : 0, mode_saved = true;
+        else if (k == "resolution") {
+            if (sscanf(value, "%dx%d", &res_w, &res_h) != 2 || res_w <= 0 || res_h <= 0) res_w = res_h = 0;
+        }
         else if (k == "aspect") {
             for (int i = 0; i < ASPECT_COUNT; i++)
                 if (v == ASPECT_WORDS[i]) aspect = i;
@@ -180,6 +186,7 @@ void FrontendSettings::load(const char* path) {
         else if (k == "check_updates") check_updates = on;
         else if (k == "news_seen") news_seen = std::max(0, atoi(value));
     }
+    if (!mode_saved && old_fullscreen >= 0) display_mode = old_fullscreen;
     fclose(f);
 }
 
@@ -195,11 +202,13 @@ void FrontendSettings::save(const char* path) const {
     static const char* const SPEAKERS[3] = {"stereo", "surround", "headphones"};
     static const char* const RT_MODES[3] = {"off", "shadows", "ao"};
     static const char* const INVERT[4] = {"off", "x", "y", "both"};
-    fprintf(f, "fullscreen = %d\nvolume = %d\nmusic = %d\naa = %s\nhaze = %d\nbloom = %s\nao = %d\nsun = %d\nshadows = %d\nhdr = %d\nsharpen = %d\n"
+    static const char* const MODES[3] = {"window", "borderless", "fullscreen"};
+    fprintf(f, "display_mode = %s\nresolution = %dx%d\n", MODES[std::clamp(display_mode, 0, 2)], res_w, res_h);
+    fprintf(f, "volume = %d\nmusic = %d\naa = %s\nhaze = %d\nbloom = %s\nao = %d\nsun = %d\nshadows = %d\nhdr = %d\nsharpen = %d\n"
                "saturation = %d\ngamma = %.2f\nmotion = %s\nspeakers = %s\nrear_boost = %d\nsample_interpolation = %s\n"
                "pad_speed = %d\ngyro = %d\ngyro_speed = %d\nvibration = %s\naim_assist = %s\nray_tracing = %s\n"
                "splash_screens = %d\nmenu_music = %d\npointer_aim = %s\nsight_size = %d\npad_aim = %s\npad_invert = %s\n",
-            fullscreen, volume, music, AA[aa], haze, BLOOM[bloom], ao, sun, shadows, hdr, sharpen, saturation,
+            volume, music, AA[aa], haze, BLOOM[bloom], ao, sun, shadows, hdr, sharpen, saturation,
             gamma / 100.0, smooth ? "smooth" : "original", SPEAKERS[speakers], rear_boost, cubic_samples ? "cubic" : "linear",
             pad_speed, gyro, gyro_speed, BLOOM[vibration], BLOOM[aim_assist], RT_MODES[ray_tracing],
             splash, menu_music, pointer_sight ? "sight" : "lever", sight_size, pad_lever ? "lever" : "sight", INVERT[pad_invert]);
@@ -325,7 +334,7 @@ const wchar_t* const Frontend::TAB_NAMES[Frontend::TAB_COUNT] = {L"EXPERIENCE", 
 // rows do not fit the page scrolls.
 const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_UPDATES, EXPERIENCE_TAB, L"UPDATES"},
-    {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB},
+    {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_RESOLUTION, DISPLAY_TAB}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB},
     {OPT_SAT, DISPLAY_TAB, L"PICTURE"}, {OPT_GAMMA, DISPLAY_TAB}, {OPT_SHARPEN, DISPLAY_TAB},
     {OPT_SUN, GRAPHICS_TAB, L"LIGHTING"}, {OPT_SHADOWS, GRAPHICS_TAB}, {OPT_HDR, GRAPHICS_TAB}, {OPT_AO, GRAPHICS_TAB},
     {OPT_BLOOM, GRAPHICS_TAB}, {OPT_HAZE, GRAPHICS_TAB},
@@ -463,8 +472,28 @@ std::vector<Frontend::Item> Frontend::items() const {
             for (wchar_t c : gamepads) connected += wchar_t(towupper(c));
             if (connected.size() > 24) connected = connected.substr(0, 23) + L"\u2026";
         }
-        std::vector<Item> all = {{OPT_DISPLAY, L"DISPLAY", settings.fullscreen ? L"FULLSCREEN" : L"WINDOW",
-                 pad_prompts ? L"Window or full screen" : L"Window or full screen (also F11 or Alt+Enter)"},
+        static const wchar_t* const MODES[3] = {L"WINDOW", L"BORDERLESS", L"FULLSCREEN"};
+        static const wchar_t* const MODE_HINTS[3] = {
+            L"A window you can move and resize",
+            L"Full screen at the desktop's resolution, the monitor left as it is: quick to switch to other windows",
+            L"Exclusive full screen: the monitor switches to the RESOLUTION below while the game runs"};
+        const int mode = std::clamp(settings.display_mode, 0, 2);
+        auto size_text = [](int w, int h) { return std::to_wstring(w) + L" x " + std::to_wstring(h); };
+        // the chosen mode (the window without one: its inside); BORDERLESS the desktop's
+        std::wstring res = mode == 1 ? size_text(desktop_w, desktop_h)
+                           : settings.res_w > 0 ? size_text(settings.res_w, settings.res_h)
+                           : mode == 0 ? size_text(client_w, client_h) : size_text(desktop_w, desktop_h);
+        std::wstring res_hints[3] = {
+            L"The size of the window's picture.  Enter: the list",
+            L"BORDERLESS always uses the desktop's resolution",
+            L"The mode the monitor switches to.  Enter: the list"};
+        if (pad_prompts) res_hints[0] = L"The size of the window's picture.  A: the list", res_hints[2] = L"The mode the monitor switches to.  A: the list";
+        if (mode == 0 && settings.res_w > 0 && (std::abs(client_w - settings.res_w) > 2 || std::abs(client_h - settings.res_h) > 2))
+            res_hints[0] = L"The size of the window's picture: shown at " + size_text(client_w, client_h) +
+                           L", the same shape, to fit on the desktop";
+        std::vector<Item> all = {{OPT_DISPLAY, L"MODE", MODES[mode],
+                 std::wstring(MODE_HINTS[mode]) + (pad_prompts ? L"" : L" (F11 or Alt+Enter: window / full screen)")},
+                {OPT_RESOLUTION, L"RESOLUTION", res, res_hints[mode], mode != 1 && !resolutions.empty()},
                 {OPT_ASPECT, L"WIDESCREEN", ASPECT_NAMES[settings.aspect], ASPECT_HINTS[settings.aspect]},
                 {OPT_MOTION, L"MOTION", settings.smooth ? L"SMOOTH" : L"ORIGINAL",
                  L"Smooth: the 3D is also drawn between the game's 57.5 frames, at your monitor's refresh rate"},
@@ -593,6 +622,7 @@ void Frontend::open(Screen s) {
     screen_ = s;
     bool page = s == Screen::Options || s == Screen::Records;
     if (page) tab_ = 0;   // the first section
+    drop_open_ = false;
     selected_ = page ? 1 : 0;   // the settings page and the records: their first row (the sections are not one)
     scroll_ = 0;
     hovered_ = -1;
@@ -622,7 +652,16 @@ void Frontend::activate(const Item& it, int dir) {
     case BACK: back(); break;
     case RESUME: push(Action::Resume); break;
     case SETTINGS: options_from_pause_ = true; open(Screen::Options); break;
-    case OPT_DISPLAY: push(Action::ToggleFullscreen); break;
+    case OPT_DISPLAY:   // applied at once (app.cpp)
+        settings.display_mode = (settings.display_mode + dir + 3) % 3;
+        push(Action::DisplayChanged);
+        break;
+    case OPT_RESOLUTION: {
+        if (settings.display_mode == 1 || resolutions.empty()) break;
+        int n = int(resolutions.size()), i = resolution_index();   // the next mode of the monitor's list from the chosen one
+        drop_pick((i + dir + n) % n);
+        break;
+    }
     case OPT_VOLUME:
         settings.volume = dir > 0 && settings.volume == 10 && wrap_ ? 0 : std::clamp(settings.volume + dir, 0, 10);
         push(Action::SettingsChanged);
@@ -725,8 +764,14 @@ bool Frontend::key(int vk) {
     }
     if (starting) return true;   // nothing to choose while the game starts
     if (news_open_ && screen_ == Screen::Main) return news_key(vk);
+    if (drop_open_) return drop_key(vk);
     auto list = items();
     int n = int(list.size());
+    if (screen_ == Screen::Options && (vk == VK_RETURN || vk == VK_SPACE) && selected_ > 0 && selected_ < n &&
+        list[selected_].id == OPT_RESOLUTION && list[selected_].enabled) {   // RESOLUTION: Enter opens its list
+        open_drop();
+        return true;
+    }
     bool option_row = selected_ < n && list[selected_].id >= OPT_DISPLAY;
     bool tabs_row = selected_ < n && list[selected_].id == TABS;
     if (screen_ == Screen::Records) switch (vk) {   // sections and rows as on the settings page; nothing to change
@@ -962,6 +1007,11 @@ void Frontend::mouse_move(int x, int y) {
         if (hot >= 0) news_button_ = hot;
         return;
     }
+    if (drop_open_) {   // the list's entry under the pointer
+        for (int k = 0; k < int(drop_rects_.size()); k++)
+            if (PtInRect(&drop_rects_[k], POINT{x, y}) && drop_top_ + k != drop_sel_) drop_sel_ = drop_top_ + k, dirty_ = true;
+        return;
+    }
     int hit = -1;
     for (size_t i = 0; i < hit_.size(); i++) {
         POINT p{x, y};
@@ -983,6 +1033,13 @@ void Frontend::click(int x, int y) {
             if (PtInRect(&news_buttons_[b], p)) news_choose(b);
         return;
     }
+    if (drop_open_) {   // a resolution, or away from the list: closed
+        for (int k = 0; k < int(drop_rects_.size()); k++)
+            if (PtInRect(&drop_rects_[k], p)) { drop_pick(drop_top_ + k); return; }
+        drop_open_ = false;
+        dirty_ = true;
+        return;
+    }
     if (PtInRect(&more_up_, p) || PtInRect(&more_down_, p)) {   // the scroll arrows of a long section
         int n = int(items().size());
         int k = std::clamp(selected_ - 1, 0, n - 3) + (PtInRect(&more_up_, p) ? -1 : 1);
@@ -992,6 +1049,10 @@ void Frontend::click(int x, int y) {
     mouse_move(x, y);
     auto list = items();
     if (hovered_ < 0 || hovered_ >= int(list.size()) || !list[hovered_].enabled) return;
+    if (list[hovered_].id == OPT_RESOLUTION) {   // its list
+        open_drop();
+        return;
+    }
     if (list[hovered_].id == TABS) {   // the section under the pointer
         for (int t = 0; t < int(tab_rects_.size()); t++)
             if (PtInRect(&tab_rects_[t], p)) set_tab(t);
@@ -1009,6 +1070,10 @@ void Frontend::click(int x, int y) {
 
 void Frontend::wheel(int x, int y, int delta) {
     if (starting || screen_ == Screen::Splash || (news_open_ && screen_ == Screen::Main)) return;
+    if (drop_open_) {
+        drop_key(delta > 0 ? VK_UP : VK_DOWN);
+        return;
+    }
     mouse_move(x, y);
     auto list = items();
     bool on_value = hovered_ >= 0 && hovered_ < int(values_.size()) && values_[hovered_].left >= 0 &&
@@ -1880,6 +1945,7 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
 
     // The panel at the right: what the chosen row is and does
     const int px1 = w - mx, pad = U(wide ? 36.0f : 26.0f);
+    panel_rect_ = {panel_x0, top - U(8), px1, bottom};
     fill(panel_x0, top - U(8), px1, bottom, PANEL, over_game ? 0.95f : 0.62f);
     frame(panel_x0, top - U(8), px1, bottom, std::max(1, U(1)), PAGE_LINE, 1);
     fill(panel_x0, top - U(8), px1, top - U(8) + std::max(2, U(4)), SABER, 1);
@@ -1925,6 +1991,84 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
                                  {nullptr, L"Q / E", L"SECTION"}, {nullptr, L"ESC", L"BACK"}};
     int kh = U(34), kx = mx;
     for (const Key& k : keys) prompt(kx, h - U(38) - kh / 2, kh, k.pad, k.key, k.what);
+}
+
+// ---- RESOLUTION's list ----
+
+int Frontend::resolution_index() const {
+    int n = int(resolutions.size());
+    int cw = settings.res_w > 0 ? settings.res_w : settings.display_mode == 0 ? client_w : desktop_w;
+    int ch = settings.res_w > 0 ? settings.res_h : settings.display_mode == 0 ? client_h : desktop_h;
+    int best = 0;
+    for (int k = 1; k < n; k++)
+        if (std::abs(resolutions[size_t(k)].first - cw) + std::abs(resolutions[size_t(k)].second - ch) <
+            std::abs(resolutions[size_t(best)].first - cw) + std::abs(resolutions[size_t(best)].second - ch))
+            best = k;
+    return best;
+}
+
+void Frontend::open_drop() {
+    if (resolutions.empty()) return;
+    drop_sel_ = int(resolutions.size()) - 1 - resolution_index();   // (the list is largest first)
+    drop_top_ = 0;
+    drop_open_ = true;
+    dirty_ = true;
+}
+
+void Frontend::drop_pick(int i) {   // i: into resolutions (smallest first)
+    drop_open_ = false;
+    dirty_ = true;
+    if (i < 0 || i >= int(resolutions.size())) return;
+    settings.res_w = resolutions[size_t(i)].first;   // applied at once
+    settings.res_h = resolutions[size_t(i)].second;
+    push(Action::DisplayChanged);
+}
+
+bool Frontend::drop_key(int vk) {
+    int n = int(resolutions.size());
+    switch (vk) {
+    case VK_UP: case 'W': drop_sel_ = (drop_sel_ + n - 1) % n; break;
+    case VK_DOWN: case 'S': drop_sel_ = (drop_sel_ + 1) % n; break;
+    case VK_PRIOR: drop_sel_ = std::max(0, drop_sel_ - 8); break;
+    case VK_NEXT: drop_sel_ = std::min(n - 1, drop_sel_ + 8); break;
+    case VK_RETURN: case VK_SPACE: drop_pick(n - 1 - drop_sel_); return true;
+    case VK_ESCAPE: case VK_BACK: drop_open_ = false; break;
+    default: return true;
+    }
+    dirty_ = true;
+    return true;
+}
+
+// Over the description panel: the monitor's modes, largest first, the one in use marked
+void Frontend::draw_drop() {
+    auto U = [&](float v) { return int(v * u_ + 0.5f); };
+    RECT pr = panel_rect_;
+    if (pr.right <= pr.left) return;
+    int n = int(resolutions.size()), row = U(44), head = U(64);
+    int x0 = pr.left, x1 = pr.right, y0 = pr.top;
+    int shown = std::max(1, std::min(n, int((pr.bottom - y0 - head - U(16)) / row)));
+    if (drop_sel_ < drop_top_) drop_top_ = drop_sel_;
+    if (drop_sel_ >= drop_top_ + shown) drop_top_ = drop_sel_ - shown + 1;
+    int y1 = y0 + head + shown * row + U(16);
+    fill(x0, y0, x1, pr.bottom, PANEL, 1);   // (the whole panel: its description must not show through)
+    frame(x0, y0, x1, y1, std::max(1, U(1)), PAGE_LINE, 1);
+    fill(x0, y0, x1, y0 + std::max(2, U(4)), SABER, 1);
+    text(ROW_MEDIUM, U(22), L"RESOLUTION", x0 + U(28), y0 + U(22), 0, {GROUP_BLUE, GROUP_BLUE});
+    drop_rects_.clear();
+    const int chosen = n - 1 - resolution_index();
+    for (int k = 0; k < shown && drop_top_ + k < n; k++) {
+        int i = drop_top_ + k, y = y0 + head + k * row;
+        const auto& r = resolutions[size_t(n - 1 - i)];
+        bool sel = i == drop_sel_, in_use = i == chosen;
+        if (sel) page_band(x0 + U(30), y, x1 - U(12), y + row, 0.22f, 0.5f, 1);
+        std::wstring label = std::to_wstring(r.first) + L" x " + std::to_wstring(r.second);
+        text(ROW, U(30), label, x0 + U(52), y + row / 2 - U(30) * 75 / 100, 0,
+             sel ? Style{GOLD_TOP, GOLD_BOTTOM, 0, 0, 1, U(2)} : Style{PAGE_TEXT, PAGE_TEXT, 0, 0, 1, U(2)});
+        if (in_use) text(ROW_MEDIUM, U(18), L"IN USE", x1 - U(28), y + row / 2 - U(10), 2, {GROUP_BLUE, GROUP_BLUE});
+        drop_rects_.push_back({x0, y, x1, y + row});
+    }
+    if (drop_top_ > 0) triangle((x0 + x1) / 2, y0 + head - U(10), U(16), -2, GOLD_BOTTOM, 1);
+    if (drop_top_ + shown < n) triangle((x0 + x1) / 2, y1 - U(8), U(16), 2, GOLD_BOTTOM, 1);
 }
 
 // ---- Splash screens ----
@@ -2109,6 +2253,7 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
     auto list = items();
     if (page) {   // the settings page (and the records in its look)
         draw_options_page(list, over_game);
+        if (drop_open_) draw_drop();
         dirty_ = gliding_;   // a band gliding: drawn again every refresh
         fade_in();
         return true;

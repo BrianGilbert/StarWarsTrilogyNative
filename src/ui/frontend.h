@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../runtime/stats.h"
@@ -24,7 +25,8 @@
 #include "splash_video.h"
 
 struct FrontendSettings {
-    bool fullscreen = false;
+    int display_mode = 0;      // MODE: 0 window, 1 borderless (the desktop's resolution), 2 exclusive full screen
+    int res_w = 0, res_h = 0;  // RESOLUTION: the window's inside, or the full-screen mode (0: default window / the desktop's)
     int aspect = 1;    // widest 3D view: 0 4:3 (original), 1 16:9, 2 21:9, 3 32:9, 4 48:9 (MAX_ASPECT in settings_bridge.cpp)
     int volume = 5;    // 0..10 (output gain): the sound effects and voices
     int music = 5;     // 0..10: the music board's gain
@@ -72,7 +74,8 @@ struct FrontendSettings {
 class Frontend {
 public:
     enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug };
-    enum class Action { None, StartArcade, Resume, Quit, ToggleFullscreen, SettingsChanged,
+    // DisplayChanged: MODE or RESOLUTION, applied to the window at once
+    enum class Action { None, StartArcade, Resume, Quit, DisplayChanged, SettingsChanged,
                         QuitToMenu, StartDebug };
 
     bool init(const std::string& font_dir);
@@ -103,6 +106,8 @@ public:
     std::wstring gamepads;  // the pads connected, for OPTIONS > CONTROLS > CONNECTED ("" = none)
     bool gyro_pad = false;  // one of them has a gyroscope
     bool pad_prompts = false;   // a gamepad drives the menu: its buttons in the key help and hints, not the keyboard's
+    std::vector<std::pair<int, int>> resolutions;   // the monitor's (app.cpp, VkPresenter::display_modes), smallest first
+    int client_w = 0, client_h = 0, desktop_w = 0, desktop_h = 0;   // the window's inside, the desktop (app.cpp)
 
     // At launch: news.txt from GitHub in the background (when the settings
     // allow it). An entry newer than the news.txt here and than the last one
@@ -129,7 +134,7 @@ private:
         // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
         OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
         OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
-        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED,
+        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION,
     };
     struct Item {
         Id id;
@@ -214,6 +219,18 @@ private:
     Glide glide_tab_, glide_row_;
     bool gliding_ = false;            // one of them is moving (this picture)
     void glide(Glide& g, long key, int y, int h, int& gy, int& gh);
+    // RESOLUTION's list: Enter or a click opens it over the description panel
+    bool drop_open_ = false;
+    int drop_sel_ = 0, drop_top_ = 0;     // the highlighted one, the first shown (resolutions, largest first)
+    std::vector<RECT> drop_rects_;
+    RECT panel_rect_{};                   // the settings page's description panel (draw_options_page)
+    // The entry of `resolutions` RESOLUTION stands on: the chosen mode (never
+    // the window's measured inside), else the nearest to what is in use
+    int resolution_index() const;
+    void open_drop();
+    void drop_pick(int i);
+    bool drop_key(int vk);
+    void draw_drop();
     // UPDATE AVAILABLE: the window over the main menu with the entries of
     // news.txt this version lacks. UPDATE NOW starts update.bat (it waits for the game to close,
     // updates, rebuilds and starts it again) and closes the game; LATER (Esc)
