@@ -11,6 +11,17 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[25] 2026-11-24
+- New OPTIONS page, in the style of Sega Rally 2: EXPERIENCE, DISPLAY, GRAPHICS, AUDIO and CONTROLS, with what each setting does in a panel at the right. RECORDS uses the same page
+- PLAY lists ARCADE CLASSIC and DOGFIGHT (coming soon); the EXTRA MODES screen and the QUALITY presets are gone
+- DISPLAY: window, borderless or full screen at the resolution you pick, RENDER SCALE, VSYNC (ON / ADAPTIVE / OFF), MAX FPS, a frame limit while another window has the focus, and WIDESCREEN AUTO to fill any window
+- NVIDIA RTX: DLSS (QUALITY to ULTRA PERFORMANCE) with dynamic resolution, besides DLAA. Other cards get FXAA
+- Settings that need a restart now offer RESTART NOW
+- Every setting opens a list of all its values: click the row (away from its arrows) or press Enter / A
+- Xbox pads: TRIGGER RUMBLE, the motors in the triggers on shots and reloads
+- ARCADE ORIGINAL (OPTIONS > EXPERIENCE): the cabinet as it was, from the SEGA logo and the attract, coin and START to play, the original look and sound, in 4:3 or widescreen. Esc pauses
+- Updates now come only through NicoLauncher: the game no longer checks GitHub itself (update.bat still works)
+
 [24] 2026-11-21
 - Fire, explosions and the glow around lights: no more grain over them or noisy edges when AMBIENT OCCLUSION and SOFT PARTICLES are on
 
