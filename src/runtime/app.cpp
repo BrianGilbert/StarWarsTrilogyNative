@@ -563,6 +563,7 @@ int main(int argc, char** argv) {
             }
         }
         printf("[display] %zu resolutions\n", frontend.resolutions.size());
+        presenter.set_vsync(s.vsync);
         if (s.display_mode != 0 || (s.res_w > 0 && s.res_h > 0)) {
             presenter.set_mode(s.display_mode, s.res_w, s.res_h);
             s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
@@ -885,6 +886,28 @@ int main(int argc, char** argv) {
     int queue_extra = 0;
     double went_out = 0, last_miss = -100;
     for (;;) {
+        {   // MAX FPS (with VSYNC in whole refreshes), never over the monitor's refresh rate
+            // unless UNLIMITED without VSYNC (even when the driver has turned vsync off),
+            // BACKGROUND FPS: 30 without the focus. Sleeps to the millisecond, then waits the rest
+            static double due = 0;
+            const FrontendSettings& fs = frontend.settings;
+            double period = std::clamp(display_clock.period, 1.0 / 500, 1.0 / 20);
+            bool vsync = fs.vsync != 0 || !g_opt.menu;   // (ADAPTIVE too)
+            int max_fps = g_opt.menu ? fs.max_fps : 0;
+            double step = period;   // MONITOR, and MOTION ORIGINAL
+            if (g_opt.interp && max_fps > 0)
+                step = vsync ? period * std::max(1.0, std::round(1.0 / max_fps / period)) : std::max(1.0 / max_fps, 1.0 / 1000);
+            else if (g_opt.interp && max_fps < 0 && !vsync)
+                step = 0;   // UNLIMITED, chosen by the player
+            if (fs.background_fps && g_opt.menu && GetForegroundWindow() != presenter.hwnd()) step = std::max(step, 1.0 / 30);
+            double now = qpc_seconds();
+            if (step > 0 && due > 0 && due > now) {
+                if (due - now > 0.002) Sleep(DWORD((due - now) * 1000) - 1);
+                if (!vsync) while (qpc_seconds() < due) std::this_thread::yield();   // (without vsync nothing else paces it)
+            }
+            now = qpc_seconds();
+            due = step <= 0 ? 0 : due > 0 && now - due < step ? std::max(due + step, now + 0.25 * step) : now + step;
+        }
         {   // before the inputs are read
             int depth = queue_depth ? queue_depth + queue_extra : 0;
             double out = presenter.limit_queue(depth, 50'000'000);
@@ -1026,6 +1049,7 @@ int main(int argc, char** argv) {
                     g_duel_invert = s.duel_invert;
                     g_sight_scale = s.sight_size / 100.0f;
                     renderer.set_picture(s.saturation / 100.0f, s.gamma / 100.0f);
+                    presenter.set_vsync(s.vsync);
                     g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert};
                     s.save("save/settings.ini");
                     break;
@@ -1037,11 +1061,13 @@ int main(int argc, char** argv) {
                 frontend.settings.save("save/settings.ini");
                 frontend.invalidate();
             }
-            {   // the window's inside and the desktop, for RESOLUTION
+            {   // the window's inside and the desktop, for RESOLUTION; the refresh rate, for MAX FPS
                 RECT c{}, m = presenter.monitor_rect();
                 GetClientRect(presenter.hwnd(), &c);
+                int hz = int(std::lround(1.0 / std::max(display_clock.period, 1.0 / 1000)));
                 if (c.right != frontend.client_w || c.bottom != frontend.client_h || m.right - m.left != frontend.desktop_w ||
-                    m.bottom - m.top != frontend.desktop_h) {
+                    m.bottom - m.top != frontend.desktop_h || hz != frontend.refresh_hz) {
+                    frontend.refresh_hz = hz;
                     frontend.client_w = c.right, frontend.client_h = c.bottom;
                     frontend.desktop_w = m.right - m.left, frontend.desktop_h = m.bottom - m.top;
                     frontend.invalidate();

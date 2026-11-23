@@ -148,6 +148,9 @@ void FrontendSettings::load(const char* path) {
         else if (k == "resolution") {
             if (sscanf(value, "%dx%d", &res_w, &res_h) != 2 || res_w <= 0 || res_h <= 0) res_w = res_h = 0;
         }
+        else if (k == "vsync") vsync = v == "adaptive" ? 2 : on ? 1 : 0;
+        else if (k == "max_fps") max_fps = v == "unlimited" ? -1 : v == "monitor" ? 0 : std::clamp(atoi(value), 0, 1000);
+        else if (k == "background_fps") background_fps = on;
         else if (k == "aspect") {
             for (int i = 0; i < ASPECT_COUNT; i++)
                 if (v == ASPECT_WORDS[i]) aspect = i;
@@ -203,7 +206,10 @@ void FrontendSettings::save(const char* path) const {
     static const char* const RT_MODES[3] = {"off", "shadows", "ao"};
     static const char* const INVERT[4] = {"off", "x", "y", "both"};
     static const char* const MODES[3] = {"window", "borderless", "fullscreen"};
-    fprintf(f, "display_mode = %s\nresolution = %dx%d\n", MODES[std::clamp(display_mode, 0, 2)], res_w, res_h);
+    std::string fps = max_fps < 0 ? "unlimited" : max_fps == 0 ? "monitor" : std::to_string(max_fps);
+    fprintf(f, "display_mode = %s\nresolution = %dx%d\nvsync = %s\nmax_fps = %s\nbackground_fps = %d\n",
+            MODES[std::clamp(display_mode, 0, 2)], res_w, res_h, vsync == 2 ? "adaptive" : vsync ? "on" : "off", fps.c_str(),
+            background_fps);
     fprintf(f, "volume = %d\nmusic = %d\naa = %s\nhaze = %d\nbloom = %s\nao = %d\nsun = %d\nshadows = %d\nhdr = %d\nsharpen = %d\n"
                "saturation = %d\ngamma = %.2f\nmotion = %s\nspeakers = %s\nrear_boost = %d\nsample_interpolation = %s\n"
                "pad_speed = %d\ngyro = %d\ngyro_speed = %d\nvibration = %s\naim_assist = %s\nray_tracing = %s\n"
@@ -334,7 +340,8 @@ const wchar_t* const Frontend::TAB_NAMES[Frontend::TAB_COUNT] = {L"EXPERIENCE", 
 // rows do not fit the page scrolls.
 const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_UPDATES, EXPERIENCE_TAB, L"UPDATES"},
-    {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_RESOLUTION, DISPLAY_TAB}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB},
+    {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_RESOLUTION, DISPLAY_TAB}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB},
+    {OPT_VSYNC, DISPLAY_TAB}, {OPT_MAXFPS, DISPLAY_TAB}, {OPT_BGFPS, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB},
     {OPT_SAT, DISPLAY_TAB, L"PICTURE"}, {OPT_GAMMA, DISPLAY_TAB}, {OPT_SHARPEN, DISPLAY_TAB},
     {OPT_SUN, GRAPHICS_TAB, L"LIGHTING"}, {OPT_SHADOWS, GRAPHICS_TAB}, {OPT_HDR, GRAPHICS_TAB}, {OPT_AO, GRAPHICS_TAB},
     {OPT_BLOOM, GRAPHICS_TAB}, {OPT_HAZE, GRAPHICS_TAB},
@@ -494,6 +501,20 @@ std::vector<Frontend::Item> Frontend::items() const {
         std::vector<Item> all = {{OPT_DISPLAY, L"MODE", MODES[mode],
                  std::wstring(MODE_HINTS[mode]) + (pad_prompts ? L"" : L" (F11 or Alt+Enter: window / full screen)")},
                 {OPT_RESOLUTION, L"RESOLUTION", res, res_hints[mode], mode != 1 && !resolutions.empty()},
+                {OPT_VSYNC, L"VSYNC", settings.vsync == 2 ? L"ADAPTIVE" : settings.vsync ? L"ON" : L"OFF",
+                 settings.vsync == 2 ? L"In step with the refreshes while the game keeps up with them; when a picture is late it goes out at once (less stutter, it may tear then)"
+                 : settings.vsync    ? L"Pictures in step with the monitor's refreshes: no tearing"
+                                     : L"Less latency; the picture may tear without G-SYNC or FreeSync"},
+                {OPT_MAXFPS, L"MAX FPS",
+                 settings.max_fps < 0    ? std::wstring(L"UNLIMITED")
+                 : settings.max_fps == 0 ? L"MONITOR (" + std::to_wstring(refresh_hz) + L")"
+                                         : std::to_wstring(settings.max_fps),
+                 !settings.smooth ? std::wstring(L"With MOTION ORIGINAL the game's own 57.5 frames are shown: nothing to set")
+                 : settings.vsync ? std::wstring(L"Pictures a second at most; with VSYNC in whole refreshes (60 on a 120 Hz monitor: every other one).  Lower: less work for the GPU")
+                                  : std::wstring(L"Pictures a second at most (UNLIMITED: as many as the GPU can).  Any number can go in settings.ini, e.g. max_fps = 117 for G-SYNC"),
+                 settings.smooth},
+                {OPT_BGFPS, L"BACKGROUND FPS", on_off(settings.background_fps),
+                 L"On: 30 pictures a second at most while another window has the focus"},
                 {OPT_ASPECT, L"WIDESCREEN", ASPECT_NAMES[settings.aspect], ASPECT_HINTS[settings.aspect]},
                 {OPT_MOTION, L"MOTION", settings.smooth ? L"SMOOTH" : L"ORIGINAL",
                  L"Smooth: the 3D is also drawn between the game's 57.5 frames, at your monitor's refresh rate"},
@@ -660,6 +681,26 @@ void Frontend::activate(const Item& it, int dir) {
         if (settings.display_mode == 1 || resolutions.empty()) break;
         int n = int(resolutions.size()), i = resolution_index();   // the next mode of the monitor's list from the chosen one
         drop_pick((i + dir + n) % n);
+        break;
+    }
+    case OPT_VSYNC: {   // ON, ADAPTIVE, OFF
+        static const int ORDER[3] = {1, 2, 0};
+        int i = settings.vsync == 2 ? 1 : settings.vsync ? 0 : 2;
+        settings.vsync = ORDER[(i + dir + 3) % 3];
+        push(Action::SettingsChanged);
+        break;
+    }
+    case OPT_BGFPS: settings.background_fps = !settings.background_fps; push(Action::SettingsChanged); break;
+    case OPT_MAXFPS: {
+        if (!settings.smooth) break;
+        static const int STEPS[] = {0, 30, 60, 90, 120, 144, 165, 240, -1};   // MONITOR first, UNLIMITED last
+        int n = int(std::size(STEPS)), i = -1;
+        for (int k = 0; k < n; k++)
+            if (STEPS[k] == settings.max_fps) i = k;
+        if (i < 0)   // a number set in settings.ini: the step above or below it
+            for (i = 1; i < n - 1 && STEPS[i] < settings.max_fps; i++) {}
+        settings.max_fps = STEPS[(i + dir + n) % n];
+        push(Action::SettingsChanged);
         break;
     }
     case OPT_VOLUME:

@@ -27,6 +27,9 @@
 struct FrontendSettings {
     int display_mode = 0;      // MODE: 0 window, 1 borderless (the desktop's resolution), 2 exclusive full screen
     int res_w = 0, res_h = 0;  // RESOLUTION: the window's inside, or the full-screen mode (0: default window / the desktop's)
+    int vsync = 1;             // VSYNC: 1 on (FIFO), 2 adaptive (FIFO_RELAXED), 0 off (IMMEDIATE, else MAILBOX)
+    int max_fps = 0;           // MAX FPS: 0 the monitor's refresh rate, -1 UNLIMITED, else pictures a second at most
+    bool background_fps = true;   // BACKGROUND FPS: 30 a second at most while another window has the focus
     int aspect = 1;    // widest 3D view: 0 4:3 (original), 1 16:9, 2 21:9, 3 32:9, 4 48:9 (MAX_ASPECT in settings_bridge.cpp)
     int volume = 5;    // 0..10 (output gain): the sound effects and voices
     int music = 5;     // 0..10: the music board's gain
@@ -108,6 +111,7 @@ public:
     bool pad_prompts = false;   // a gamepad drives the menu: its buttons in the key help and hints, not the keyboard's
     std::vector<std::pair<int, int>> resolutions;   // the monitor's (app.cpp, VkPresenter::display_modes), smallest first
     int client_w = 0, client_h = 0, desktop_w = 0, desktop_h = 0;   // the window's inside, the desktop (app.cpp)
+    int refresh_hz = 60;                            // the monitor's (MAX FPS MONITOR)
 
     // At launch: news.txt from GitHub in the background (when the settings
     // allow it). An entry newer than the news.txt here and than the last one
@@ -134,7 +138,7 @@ private:
         // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
         OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
         OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
-        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION,
+        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION, OPT_VSYNC, OPT_MAXFPS, OPT_BGFPS,
     };
     struct Item {
         Id id;

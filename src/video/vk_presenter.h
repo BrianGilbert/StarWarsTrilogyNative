@@ -36,7 +36,7 @@ public:
 
     // Processes window messages; returns false once it is closed
     bool pump();
-    // Records and presents a frame with vsync. The image arrives in
+    // Records and presents a frame (with vsync unless set_vsync(0)). The image arrives in
     // COLOR_ATTACHMENT_OPTIMAL and must be left that way when done.
     void frame(const RecordFn& record);
 
@@ -62,6 +62,13 @@ public:
     // The monitor's resolutions in pixels (its usual modes, each size once, smallest first)
     std::vector<std::pair<int, int>> display_modes() const;
     void close() { quit_ = true; }
+    // VSYNC: 1 on (FIFO). 0 off: each image goes out as soon as it is drawn, without
+    // waiting for the monitor's refresh (tearing; mailbox if the driver has no
+    // immediate mode). 2 adaptive: FIFO_RELAXED, a late image goes out at once
+    // (FIFO if the driver lacks it). Takes effect with the next frame (a new swapchain)
+    void set_vsync(int mode) {
+        if (mode != vsync_) vsync_ = mode, resized_ = true;
+    }
 
     // Sees key presses and mouse messages first; returning true swallows
     // them (Esc then no longer closes the window)
@@ -142,6 +149,8 @@ private:
     HWND hwnd_ = nullptr;
     bool quit_ = false, resized_ = false, fullscreen_ = false, show_cursor_ = false;
     int mode_ = 0, full_mode_ = 1, full_w_ = 0, full_h_ = 0;   // the mode on; the last full-screen one (F11)
+    int vsync_ = 1;
+    VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_MAX_ENUM_KHR;   // of the swapchain (printed when it changes)
 
     VkInstance instance_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
