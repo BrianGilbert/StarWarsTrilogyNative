@@ -34,7 +34,8 @@ struct FrontendSettings {
 #ifdef __APPLE__
     int aa = 1;        // 0 MSAA 4x, 1 MSAA 8x, 2 off (takes effect on the next launch)
 #else
-    int aa = 0;        // 0 MSAA, 1 DLAA, 2 off (takes effect on the next launch)
+    int aa = 0;        // 0 MSAA, 1 DLAA, 2 off, 3 DLSS QUALITY, 4 BALANCED, 5 PERFORMANCE, 6 ULTRA PERFORMANCE
+                       // (takes effect on the next launch)
 #endif
     int supersample = 100;   // the 3D drawn at this % of the window and scaled down (the macOS and Linux menu: 100, 150, 200)
     bool haze = true;  // distance haze

@@ -204,7 +204,7 @@ vec4 sample_texture(vec2 duv_dx, vec2 duv_dy) {
     uint fmt = (tex >> 28) & 15u;
     vec2 st = uv * vec2(size);
     vec4 sum;
-    float max_aniso = vp.quality.y;
+    float max_aniso = floor(vp.quality.y);
     if (max_aniso < 1.0) {
         sum = bilinear(base, size, st, 0, fmt);   // original look: base level only
     } else {
@@ -379,7 +379,11 @@ vec4 explosion(out float glow_k) {
 }
 
 void main() {
-    vec2 duv_dx = dFdx(uv), duv_dy = dFdy(uv);
+    // (quality.y's fraction: with DLSS upscaling or the dynamic resolution, 1 -
+    // the size of the 3D image over that of the picture it makes: the
+    // textures are filtered for the latter)
+    float lod_scale = 1.0 - fract(vp.quality.y);
+    vec2 duv_dx = dFdx(uv) * lod_scale, duv_dy = dFdy(uv) * lod_scale;
     vec3 dpx = dFdx(view_pos), dpy = dFdy(view_pos);   // the surface's frame, for the surface detail
     // Motion vector in pixels; NDC is linear across the screen, so its
     // derivatives give the viewport size without passing it in

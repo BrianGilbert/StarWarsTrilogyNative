@@ -151,7 +151,15 @@ void FrontendSettings::load(const char* path) {
         else if (k == "speakers") speakers = v == "surround" ? 1 : v == "headphones" ? 2 : 0;
         else if (k == "rear_boost") rear_boost = std::clamp(atoi(value) / 3 * 3, 0, 12);
         else if (k == "sample_interpolation") cubic_samples = v != "linear";
-        else if (k == "aa") aa = v == "dlaa" || v == "msaa8" ? 1 : (v == "none" || v == "off") ? 2 : 0;
+        else if (k == "aa") {
+            aa = v == "dlaa" || v == "msaa8" ? 1 : (v == "none" || v == "off") ? 2 : 0;
+#ifndef __APPLE__   // the DLSS modes (NVIDIA)
+            if (v == "dlss" || v == "dlss_quality") aa = 3;
+            else if (v == "dlss_balanced") aa = 4;
+            else if (v == "dlss_performance") aa = 5;
+            else if (v == "dlss_ultra") aa = 6;
+#endif
+        }
         else if (k == "supersample") supersample = atoi(value) >= 200 ? 200 : atoi(value) >= 150 ? 150 : 100;
         else if (k == "haze") haze = on;
         else if (k == "bloom") bloom = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : on ? 2 : 0;
@@ -183,13 +191,32 @@ void FrontendSettings::load(const char* path) {
     fclose(f);
 }
 
+// ANTI-ALIASING: settings.aa's values (the order they are stored in), the
+// order the row steps through them and what each does
+#ifdef __APPLE__
+constexpr int AA_COUNT = 3;
+constexpr int AA_ORDER[AA_COUNT] = {0, 1, 2};
+#else
+constexpr int AA_COUNT = 7;
+constexpr int AA_ORDER[AA_COUNT] = {2, 0, 1, 3, 4, 5, 6};   // OFF, MSAA, DLAA, DLSS QUALITY .. ULTRA PERFORMANCE
+const wchar_t* const AA_HINT[AA_COUNT] = {
+    L"Edge smoothing, works on any graphics card.  Applies on the next start",
+    L"NVIDIA RTX: AI edge smoothing at full resolution, the sharpest.  Applies on the next start",
+    L"No edge smoothing.  Applies on the next start",
+    L"NVIDIA RTX: the 3D drawn at 67% and rebuilt sharp, lighter than DLAA.  Applies on the next start",
+    L"NVIDIA RTX: the 3D drawn at 58% and rebuilt.  Applies on the next start",
+    L"NVIDIA RTX: the 3D drawn at half size, for 4K.  Applies on the next start",
+    L"NVIDIA RTX: the 3D drawn at a third, for 8K or slow cards.  Applies on the next start",
+};
+#endif
+
 void FrontendSettings::save(const char* path) const {
     FILE* f = fopen(path, "w");
     if (!f) return;
 #ifdef __APPLE__
     static const char* const AA[3] = {"msaa", "msaa8", "none"};
 #else
-    static const char* const AA[3] = {"msaa", "dlaa", "none"};
+    static const char* const AA[AA_COUNT] = {"msaa", "dlaa", "none", "dlss", "dlss_balanced", "dlss_performance", "dlss_ultra"};
 #endif
     static const char* const BLOOM[4] = {"off", "low", "medium", "high"};   // also the vibration and aim assist levels
     static const char* const SPEAKERS[3] = {"stereo", "surround", "headphones"};
@@ -388,7 +415,8 @@ std::vector<Frontend::Item> Frontend::items() const {
 #ifdef __APPLE__
     static const wchar_t* const AA[3] = {L"MSAA 4X", L"MSAA 8X", L"OFF"};   // no DLAA without NVIDIA: 1 is MSAA 8x here
 #else
-    static const wchar_t* const AA[3] = {L"MSAA 4X", L"DLAA", L"OFF"};
+    static const wchar_t* const AA[AA_COUNT] = {L"MSAA 4X", L"DLAA", L"OFF", L"DLSS QUALITY", L"DLSS BALANCED",
+                                                L"DLSS PERFORMANCE", L"DLSS ULTRA PERFORMANCE"};
 #endif
     static const wchar_t* const BLOOM_LEVELS[4] = {L"OFF", L"LOW", L"MEDIUM", L"HIGH"};
     static const wchar_t* const INVERT_TEXT[4] = {L"OFF", L"HORIZONTAL", L"VERTICAL", L"BOTH"};
@@ -441,7 +469,7 @@ std::vector<Frontend::Item> Frontend::items() const {
 #ifdef __APPLE__
                                      L"Edge smoothing (MSAA 4x, 8x or off).  Applies on the next start";
 #else
-                                     L"Edge smoothing (MSAA, NVIDIA DLAA or off).  Applies on the next start";
+                                     AA_HINT[std::clamp(settings.aa, 0, AA_COUNT - 1)];
 #endif
         wchar_t gamma_text[16];
         swprintf(gamma_text, 16, L"%.2f", settings.gamma / 100.0);
@@ -637,7 +665,14 @@ void Frontend::activate(const Item& it, int dir) {
     case OPT_SPEAKERS: settings.speakers = (settings.speakers + dir + 3) % 3; push(Action::SettingsChanged); break;
     case OPT_REAR: settings.rear_boost = (settings.rear_boost + 3 * dir + 15) % 15; push(Action::SettingsChanged); break;
     case OPT_SAMPLES: settings.cubic_samples = !settings.cubic_samples; push(Action::SettingsChanged); break;
-    case OPT_AA: settings.aa = (settings.aa + dir + 3) % 3; push(Action::SettingsChanged); break;
+    case OPT_AA: {   // in the order of AA_ORDER
+        int at = 0;
+        for (int i = 0; i < AA_COUNT; i++)
+            if (AA_ORDER[i] == settings.aa) at = i;
+        settings.aa = AA_ORDER[(at + dir + AA_COUNT) % AA_COUNT];
+        push(Action::SettingsChanged);
+        break;
+    }
     case OPT_SCALE: settings.supersample = settings.supersample == 100 ? (dir > 0 ? 150 : 200)
                                          : settings.supersample == 150 ? (dir > 0 ? 200 : 100)
                                                                        : (dir > 0 ? 100 : 150);

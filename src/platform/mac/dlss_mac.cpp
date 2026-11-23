@@ -9,9 +9,13 @@ std::vector<std::string> device_extensions(VkInstance, VkPhysicalDevice) { retur
 
 bool Dlaa::init(VkInstance, VkPhysicalDevice, VkDevice) { return false; }
 void Dlaa::shutdown() {}
-bool Dlaa::evaluate(VkCommandBuffer, const Image&, const Image&, const Image&, const Image&, uint32_t, uint32_t, float,
-                    float, bool, int) {
+bool Dlaa::evaluate(VkCommandBuffer, const Image&, const Image&, const Image&, const Image&, uint32_t, uint32_t,
+                    uint32_t, uint32_t, float, float, bool, int, uint32_t, uint32_t) {
     return false;
+}
+void Dlaa::configure(int mode, int preset) {
+    mode_ = mode;
+    preset_ = preset;
 }
 
 }  // namespace dlss

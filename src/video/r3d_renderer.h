@@ -34,10 +34,16 @@ ScreenLayout compute_layout(float win_w, float win_h, float max_aspect);
 class R3DRenderer {
 public:
     // msaa: samples per pixel (1 = off); aniso: max anisotropic taps (0 = no mipmaps);
-    // dlaa: NVIDIA DLAA instead of MSAA (the presenter must have its extensions)
-    bool init(VkPresenter& vk, float supersample, int msaa, int aniso, bool dlaa = false);
+    // dlaa: NVIDIA DLAA instead of MSAA (the presenter must have its extensions);
+    // dlss_mode (with dlaa): 0 DLAA, 1 QUALITY, 2 BALANCED, 3 PERFORMANCE, 4 ULTRA
+    // PERFORMANCE: the 3D drawn smaller (dlss::MODE_SCALE) and upscaled.
+    // dlss_model: 0 AUTO, 1 K, 2 M, 3 L (dlss::preset_for)
+    bool init(VkPresenter& vk, float supersample, int msaa, int aniso, bool dlaa = false, int dlss_mode = 0,
+              int dlss_model = 0);
     int msaa_samples() const { return int(samples_); }
     bool dlaa_active() const { return dlaa_.ready(); }
+    bool dlss_upscaling() const { return dlaa_.ready() && upscale_ > 1.0f; }
+    int dlss_preset() const { return dlss_preset_; }   // the NGX preset in use (dlss::PRESET_*), 0 without DLSS
     // Image slots this GPU can bind (slot 0 = none): the texture pack's and the
     // 2D replacement pictures' (1 = none: the 2D and backdrop packs are off)
     uint32_t replacement_slots() const { return replace_slots_; }
@@ -80,6 +86,11 @@ public:
     }
 
     void record(VkCommandBuffer cmd, VkImageView target, VkExtent2D extent);
+    // Dynamic resolution (DLAA and DLSS): the graphics card's time for an
+    // image, in ms, it should stay within (a refresh of the screen; 0: none).
+    // Where an image takes nearly all of it the 3D is drawn a little smaller
+    // for a while, and DLSS brings it to the full size
+    void set_gpu_budget(float ms) { gpu_budget_ms_ = ms; }
     void set_max_aspect(float aspect) { max_aspect_ = aspect; }
     // true: 2D layers upscaled with xBR; false: plain square pixels
     void set_smooth_2d(bool smooth) { smooth_2d_ = smooth; }
@@ -184,7 +195,8 @@ private:
     void bind_scene_image(VkImageView view, VkImageView alpha);
     void update_atmosphere(const ScreenLayout& lay, uint32_t target_w, uint32_t target_h);
     bool back_layer_extended() const;
-    void ensure_targets(uint32_t w, uint32_t h);
+    // w, h: the 3D image as drawn; up_w, up_h: as DLSS hands it on (the same but with DLSS upscaling)
+    void ensure_targets(uint32_t w, uint32_t h, uint32_t up_w, uint32_t up_h);
     void upload_slot(VkDescriptorSet set, uint32_t binding, VkSampler sampler, uint32_t slot, int w, int h,
                      const std::vector<uint8_t>& rgba,
                      bool replace = false);   // replace: the slot's previous picture is freed
@@ -256,8 +268,9 @@ private:
     const R3DViewport* rt_world_ = nullptr;   // the world viewport they are traced in
     uint32_t rt_generation_ = 0;       // R3DRayTracer::generation() the descriptors point to
     void record_ray_tracing(const Frame& f);
-    // Measurement (SWT_GPUTIME, or LW_GPUTIME): GPU time of each pass of the
-    // frame, averaged over 300 frames and printed. Timestamps in this order
+    // GPU time of each pass of the frame (timed whenever DLAA is on, for the
+    // dynamic resolution; SWT_GPUTIME or LW_GPUTIME also averages it over 300
+    // frames and prints it). Timestamps in this order
     enum GpuMark : uint32_t {
         GPU_START, GPU_UPLOADS, GPU_RT, GPU_SHADOWS, GPU_AO_FROM, GPU_AO_TO, GPU_WORLD, GPU_DLAA, GPU_BLOOM,
         GPU_SHAFTS, GPU_DIFFUSION, GPU_EXPOSURE, GPU_COMPOSE, GPU_MARKS
@@ -270,6 +283,13 @@ private:
     bool gpu_ao_marked_ = false;       // this frame's ambient occlusion has its two marks
     void gpu_time_mark(VkCommandBuffer cmd, uint32_t index);
     void gpu_time_report(uint32_t out_w, uint32_t out_h);
+    // Dynamic resolution: the share of the full 3D size drawn each way (1:
+    // all of it), from the graphics card's time for the last images
+    bool dynamic_resolution() const;
+    void update_dynamic_scale(double gpu_ms);
+    float gpu_budget_ms_ = 0.0f;
+    float dyn_scale_ = 1.0f;
+    int dyn_calm_ = 0;   // images in a row with room to spare
     Image rays_a_, rays_b_;            // light shafts: mask, then smeared towards the sun (quarter size)
     VkDescriptorSet rays_set_ = VK_NULL_HANDLE;   // source: rays_a_
     Image diff_a_, diff_b_;            // diffusion (BLOOM): the picture behind the HUD, blurred, quarter size
@@ -282,6 +302,9 @@ private:
     Image exposure_;   // 1x1 R16F: average log brightness of the 3D image, eased from frame to frame
     VkPipeline compose_measure_ = VK_NULL_HANDLE;   // the composition in measure mode, blended into exposure_
     dlss::Dlaa dlaa_;
+    float upscale_ = 1.0f;         // DLSS: the 3D is drawn this many times smaller than it is shown (1: DLAA, or no DLSS)
+    uint32_t jitter_phases_ = 8;   // 8 per output pixel: 8 x upscale_^2 (8 DLAA, 18 QUALITY ... 72 ULTRA PERFORMANCE)
+    int dlss_preset_ = 0;          // NGX's render preset (dlss::PRESET_*), 0 without DLSS
     float light_gain_ = 1.0f;   // the --light-gain multiplier
     bool motion_pass_ = false;   // pipelines and targets carry motion vectors (DLAA started)
     VkImageView composed_view_ = VK_NULL_HANDLE;   // 3D image the composition samples

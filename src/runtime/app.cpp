@@ -358,7 +358,7 @@ int main(int argc, char** argv) {
     }
 
     R3DRenderer renderer;
-    if (!renderer.init(presenter, g_opt.supersample, g_opt.msaa, g_opt.aniso, g_opt.dlaa)) {
+    if (!renderer.init(presenter, g_opt.supersample, g_opt.msaa, g_opt.aniso, g_opt.dlaa, g_opt.dlss, g_opt.dlss_model)) {
         fprintf(stderr, "Could not start the 3D renderer\n");
         MessageBoxA(nullptr, "Could not start the 3D renderer. Update the graphics driver.",
                     "Star Wars Trilogy Native", MB_OK | MB_ICONERROR);
@@ -389,8 +389,13 @@ int main(int argc, char** argv) {
     if (g_opt.haze > 0) printf("[video] distance haze on (strength %.2f)\n", g_opt.haze);
     if (g_opt.dlaa && !renderer.dlaa_active()) printf("[video] DLAA not available: using MSAA\n");
     if (renderer.dlaa_active())
-        printf("[video] antialiasing NVIDIA DLAA, anisotropic filtering %dx%s\n", g_opt.aniso,
-               g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
+        printf("[video] antialiasing NVIDIA %s, anisotropic filtering %dx%s\n",
+               !renderer.dlss_upscaling() ? "DLAA"
+               : g_opt.dlss == 2          ? "DLSS BALANCED"
+               : g_opt.dlss == 3          ? "DLSS PERFORMANCE"
+               : g_opt.dlss == 4          ? "DLSS ULTRA PERFORMANCE"
+                                          : "DLSS QUALITY",
+               g_opt.aniso, g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
     else
         printf("[video] antialiasing MSAA %dx, anisotropic filtering %dx%s\n", renderer.msaa_samples(), g_opt.aniso,
                g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
@@ -1173,6 +1178,8 @@ int main(int argc, char** argv) {
             ready_newest.reset();
         }
         double display = display_clock.tick();
+        // (dynamic resolution keeps the graphics card's time within a refresh)
+        renderer.set_gpu_budget(float(display_clock.period * 1000.0));
         std::shared_ptr<const R3DFrameState> latest;
         std::shared_ptr<Prepared> ready;
         if (interpolating) {

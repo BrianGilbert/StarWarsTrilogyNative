@@ -25,7 +25,8 @@ void options_from_settings(Options& o, const FrontendSettings& ini) {
 #ifdef __APPLE__
     o.msaa = ini.aa == 1 ? 8 : ini.aa == 2 ? 1 : 4;
 #else
-    o.dlaa = ini.aa == 1;
+    o.dlaa = ini.aa == 1 || ini.aa >= 3;
+    o.dlss = ini.aa >= 3 ? std::min(ini.aa - 2, 4) : 0;   // 3 QUALITY .. 6 ULTRA PERFORMANCE
     if (ini.aa == 2) o.msaa = 1;
 #endif
 #ifndef _WIN32   // the SUPERSAMPLING entry of the menu (macOS, Linux)
@@ -56,7 +57,7 @@ void settings_from_options(FrontendSettings& s, const Options& o) {
 #ifdef __APPLE__
     s.aa = o.msaa >= 8 ? 1 : o.msaa <= 1 ? 2 : 0;
 #else
-    s.aa = o.dlaa ? 1 : o.msaa <= 1 ? 2 : 0;
+    s.aa = o.dlss ? 2 + std::clamp(o.dlss, 1, 4) : o.dlaa ? 1 : o.msaa <= 1 ? 2 : 0;
 #endif
 #ifndef _WIN32
     s.supersample = o.supersample >= 2.0f ? 200 : o.supersample >= 1.5f ? 150 : 100;
