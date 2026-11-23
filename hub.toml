@@ -40,8 +40,8 @@ to = "third_party/downloads/miniz-3.0.2.zip"
 # whenever src/video/dlss* or tools/dlss_bridge change.
 [[fetch]]
 name = "DLSS bridge"
-url = "https://raw.githubusercontent.com/snicolast/NicoLauncher-Hub/main/dlss/swtrilogy/dlss_bridge-abi1-96f2480e8d9a.dll"
-sha256 = "341576cb485b4ec11e6e647816c01dd2658ed0b81e7701441b49febc766bd4d5"
+url = "https://raw.githubusercontent.com/snicolast/NicoLauncher-Hub/main/dlss/swtrilogy/dlss_bridge-abi4-986e57b2cd43.dll"
+sha256 = "41f9d3105aa02a12232a6db756c97637e976334e53c97010f8d77b14fcfc7d8d"
 to = "dlss_bridge.dll"
 
 # NVIDIA's DLSS runtime, from NVIDIA's own repository (the same as
