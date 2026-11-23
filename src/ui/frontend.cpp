@@ -724,8 +724,10 @@ void Frontend::activate(const Item& it, int dir) {
         break;
     case OPT_RESOLUTION: {
         if (settings.display_mode == 1 || resolutions.empty()) break;
-        int n = int(resolutions.size()), i = resolution_index();   // the next mode of the monitor's list from the chosen one
-        drop_pick((i + dir + n) % n);
+        int n = int(resolutions.size()), i = (resolution_index() + dir + n) % n;   // the next mode of the monitor's list
+        settings.res_w = resolutions[size_t(i)].first;   // applied at once
+        settings.res_h = resolutions[size_t(i)].second;
+        push(Action::DisplayChanged);
         break;
     }
     case OPT_VSYNC: {   // ON, ADAPTIVE, OFF
@@ -890,10 +892,8 @@ bool Frontend::key(int vk) {
     auto list = items();
     int n = int(list.size());
     if (screen_ == Screen::Options && (vk == VK_RETURN || vk == VK_SPACE) && selected_ > 0 && selected_ < n &&
-        list[selected_].id == OPT_RESOLUTION && list[selected_].enabled) {   // RESOLUTION: Enter opens its list
-        open_drop();
+        list[selected_].id >= OPT_DISPLAY && list[selected_].enabled && open_drop(list[selected_].id))   // its list
         return true;
-    }
     bool option_row = selected_ < n && list[selected_].id >= OPT_DISPLAY;
     bool tabs_row = selected_ < n && list[selected_].id == TABS;
     if (screen_ == Screen::Records) switch (vk) {   // sections and rows as on the settings page; nothing to change
@@ -985,22 +985,22 @@ void Frontend::click(int x, int y) {
     mouse_move(x, y);
     auto list = items();
     if (hovered_ < 0 || hovered_ >= int(list.size()) || !list[hovered_].enabled) return;
-    if (list[hovered_].id == OPT_RESOLUTION) {   // its list
-        open_drop();
-        return;
-    }
     if (list[hovered_].id == TABS) {   // the section under the pointer
         for (int t = 0; t < int(tab_rects_.size()); t++)
             if (PtInRect(&tab_rects_[t], p)) set_tab(t);
         return;
     }
-    // Option rows: a click on the value side goes down left of the middle of the
-    // value and up right of it (the arrows); on the label it steps up and wraps around
-    int dir = +1;
-    if (hovered_ < int(values_.size()) && values_[hovered_].left >= 0 && x >= values_[hovered_].left)
-        dir = x < values_[hovered_].middle ? -1 : +1;
-    else wrap_ = true;
-    activate(list[hovered_], dir);
+    // Option rows: the arrows step down and up; anywhere else the list of values
+    // opens (a row without one steps up and wraps around)
+    int dir = 0;
+    if (hovered_ < int(values_.size()) && values_[hovered_].left >= 0) {
+        const ValueArea& v = values_[size_t(hovered_)];
+        if (x >= v.left && x < v.value) dir = -1;
+        else if (x >= v.right) dir = +1;
+    }
+    if (dir == 0 && list[hovered_].id >= OPT_DISPLAY && open_drop(list[hovered_].id)) return;
+    wrap_ = dir == 0;
+    activate(list[hovered_], dir == 0 ? +1 : dir);
     wrap_ = false;
 }
 
@@ -1634,7 +1634,7 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
             text(MONO, U(20), it.value, tx - tw - U(chevron ? 56.0f : 28.0f), y + spacing / 2 - U(12), 2,
                  {0x7FB0D8, 0x6090B8});
         hit_.push_back({band0, y, band1, y + spacing});
-        values_.push_back({-1, 0});
+        values_.push_back({-1, 0, 0});
         y += spacing;
         if (sel) {   // its description right under it, the entries below move down
             y += U(4);
@@ -1743,7 +1743,7 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
     }
 
     hit_.assign(size_t(n), RECT{});
-    values_.assign(size_t(n), ValueArea{-1, 0});
+    values_.assign(size_t(n), ValueArea{-1, 0, 0});
 
     // The sections, one under the other; the open one with a saber band
     const int sec_h = U(92);
@@ -1877,7 +1877,7 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
             triangle(right + U(13), cy, U(14), +1, GOLD_BOTTOM, 1);
         }
         hit_[size_t(1 + k)] = {rows_x0 - U(18), y, rows_x1 + U(4), y + row_h};
-        values_[size_t(1 + k)] = {vx0 - U(40), (vx0 + right) / 2};
+        values_[size_t(1 + k)] = {vx0 - U(40), vx0 - U(4), right + U(2)};
         y += row_h;
         last_shown = k;
     }
@@ -1931,11 +1931,12 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
     fill(0, h - U(76), w, h - U(76) + std::max(1, U(1)), PAGE_LINE, 1);
     struct Key { const wchar_t *pad, *key, *what; };
     std::vector<Key> keys = pad_prompts
-        ? std::vector<Key>{{L"LS", nullptr, rec ? L"SELECT" : L"SELECT / CHANGE"}, {L"LB", nullptr, L""}, {L"RB", nullptr, L"SECTION"},
-                           {L"B", nullptr, L"BACK"}}
+        ? rec ? std::vector<Key>{{L"LS", nullptr, L"SELECT"}, {L"LB", nullptr, L""}, {L"RB", nullptr, L"SECTION"}, {L"B", nullptr, L"BACK"}}
+              : std::vector<Key>{{L"LS", nullptr, L"SELECT / CHANGE"}, {L"A", nullptr, L"LIST"}, {L"LB", nullptr, L""},
+                                 {L"RB", nullptr, L"SECTION"}, {L"B", nullptr, L"BACK"}}
         : rec ? std::vector<Key>{{nullptr, L"UP / DOWN", L"SELECT"}, {nullptr, L"Q / E", L"SECTION"}, {nullptr, L"ESC", L"BACK"}}
               : std::vector<Key>{{nullptr, L"UP / DOWN", L"SELECT"}, {nullptr, L"LEFT / RIGHT", L"CHANGE"},
-                                 {nullptr, L"Q / E", L"SECTION"}, {nullptr, L"ESC", L"BACK"}};
+                                 {nullptr, L"ENTER", L"LIST"}, {nullptr, L"Q / E", L"SECTION"}, {nullptr, L"ESC", L"BACK"}};
     int kh = U(34), kx = mx;
     for (const Key& k : keys) prompt(kx, h - U(38) - kh / 2, kh, k.pad, k.key, k.what);
 }
@@ -2028,44 +2029,133 @@ int Frontend::resolution_index() const {
     return best;
 }
 
-void Frontend::open_drop() {
-    if (resolutions.empty()) return;
-    drop_sel_ = int(resolutions.size()) - 1 - resolution_index();   // (the list is largest first)
-    drop_top_ = 0;
-    drop_open_ = true;
-    dirty_ = true;
+void Frontend::first_value(Id id) {
+    FrontendSettings& s = settings;
+    switch (id) {
+    case OPT_DISPLAY: s.display_mode = 0; break;
+    case OPT_VOLUME: s.volume = 0; break;
+    case OPT_MUSIC: s.music = 0; break;
+    case OPT_SPEAKERS: s.speakers = 0; break;
+    case OPT_REAR: s.rear_boost = 0; break;
+    case OPT_SAMPLES: s.cubic_samples = true; break;
+    case OPT_AA: s.aa = AA_ORDER[0]; break;
+    case OPT_HAZE: s.haze = true; break;
+    case OPT_BLOOM: s.bloom = 0; break;
+    case OPT_AO: s.ao = true; break;
+    case OPT_SUN: s.sun = true; break;
+    case OPT_SHADOWS: s.shadows = true; break;
+    case OPT_HDR: s.hdr = true; break;
+    case OPT_SHARPEN: s.sharpen = true; break;
+    case OPT_SAT: s.saturation = 0; break;
+    case OPT_GAMMA: s.gamma = 50; break;
+    case OPT_MOTION: s.smooth = true; break;
+    case OPT_PAD_SPEED: s.pad_speed = 1; break;
+    case OPT_GYRO: s.gyro = true; break;
+    case OPT_GYRO_SPEED: s.gyro_speed = 1; break;
+    case OPT_VIBRATION: s.vibration = 0; break;
+    case OPT_ASSIST: s.aim_assist = 0; break;
+    case OPT_RT: s.ray_tracing = 0; break;
+    case OPT_MENU_MUSIC: s.menu_music = true; break;
+    case OPT_POINTER: s.pointer_sight = true; break;
+    case OPT_SIGHT: s.sight_size = 50; break;
+    case OPT_PAD_AIM: s.pad_lever = false; break;
+    case OPT_PAD_INVERT: s.pad_invert = 0; break;
+    case OPT_DUEL_INVERT: s.duel_invert = 0; break;
+    case OPT_SCALE: s.render_scale = 50; break;
+    case OPT_ASPECT: s.aspect = 0; break;
+    case OPT_EXPLOSIONS: s.explosions = true; break;
+    case OPT_VSYNC: s.vsync = 1; break;   // ON, ADAPTIVE, OFF
+    case OPT_MAXFPS: s.max_fps = 0; break;
+    case OPT_BGFPS: s.background_fps = true; break;
+    case OPT_TRIGGERS: s.trigger_rumble = 0; break;
+    case OPT_EXPERIENCE: s.experience = 0; break;
+    case OPT_ARCADE_ASPECT: arcade_side().aspect = 0; break;
+    default: break;
+    }
 }
 
-void Frontend::drop_pick(int i) {   // i: into resolutions (smallest first)
+bool Frontend::open_drop(Id id) {
+    auto value_of = [&] {   // the row's value as its row shows it
+        for (const Item& it : items())
+            if (it.id == id) return it.value;
+        return std::wstring();
+    };
+    drop_.clear();
+    drop_in_use_ = -1;
+    if (id == OPT_RESOLUTION) {
+        if (settings.display_mode == 1 || resolutions.empty()) return false;
+        int n = int(resolutions.size());
+        for (int k = 0; k < n; k++) {   // largest first
+            const auto& r = resolutions[size_t(n - 1 - k)];
+            DropEntry e{std::to_wstring(r.first) + L" x " + std::to_wstring(r.second), settings, other};
+            e.s.res_w = r.first;
+            e.s.res_h = r.second;
+            drop_.push_back(e);
+        }
+        drop_in_use_ = n - 1 - resolution_index();
+        drop_action_ = Action::DisplayChanged;
+    } else {   // stepped up from its first value until a value comes again
+        const FrontendSettings keep = settings, keep_other = other;
+        const std::wstring now = value_of();
+        std::vector<Action> pushed;
+        pushed.swap(actions_);
+        first_value(id);
+        for (int k = 0; k < 64; k++) {
+            std::wstring v = value_of();
+            if (v.empty() || std::any_of(drop_.begin(), drop_.end(), [&](const DropEntry& e) { return e.label == v; })) break;
+            if (v == now) drop_in_use_ = int(drop_.size());
+            drop_.push_back({v, settings, other});
+            activate(Item{id}, +1);
+        }
+        drop_action_ = actions_.empty() ? Action::SettingsChanged : actions_.back();
+        actions_.swap(pushed);
+        settings = keep;
+        other = keep_other;
+    }
+    if (drop_.size() < 2) {
+        drop_.clear();
+        return false;
+    }
+    drop_id_ = id;
+    drop_sel_ = std::max(drop_in_use_, 0);
+    drop_top_ = 0;
+    drop_open_ = dirty_ = true;
+    return true;
+}
+
+void Frontend::drop_pick(int i) {   // applied at once
     drop_open_ = false;
     dirty_ = true;
-    if (i < 0 || i >= int(resolutions.size())) return;
-    settings.res_w = resolutions[size_t(i)].first;   // applied at once
-    settings.res_h = resolutions[size_t(i)].second;
-    push(Action::DisplayChanged);
+    if (i < 0 || i >= int(drop_.size())) return;
+    if (i != drop_in_use_) {
+        settings = drop_[size_t(i)].s;
+        other = drop_[size_t(i)].other;
+        push(drop_action_);
+    }
+    drop_.clear();
 }
 
 bool Frontend::drop_key(int vk) {
-    int n = int(resolutions.size());
+    int n = int(drop_.size());
     switch (vk) {
     case VK_UP: case 'W': drop_sel_ = (drop_sel_ + n - 1) % n; break;
     case VK_DOWN: case 'S': drop_sel_ = (drop_sel_ + 1) % n; break;
     case VK_PRIOR: drop_sel_ = std::max(0, drop_sel_ - 8); break;
     case VK_NEXT: drop_sel_ = std::min(n - 1, drop_sel_ + 8); break;
-    case VK_RETURN: case VK_SPACE: drop_pick(n - 1 - drop_sel_); return true;
-    case VK_ESCAPE: case VK_BACK: drop_open_ = false; break;
+    case VK_RETURN: case VK_SPACE: drop_pick(drop_sel_); return true;
+    case VK_ESCAPE: case VK_BACK: drop_open_ = false; drop_.clear(); break;
     default: return true;
     }
     dirty_ = true;
     return true;
 }
 
-// Over the description panel: the monitor's modes, largest first, the one in use marked
+// Over the description panel: the row's name, its values, the one in use marked
 void Frontend::draw_drop() {
     auto U = [&](float v) { return int(v * u_ + 0.5f); };
     RECT pr = panel_rect_;
     if (pr.right <= pr.left) return;
-    int n = int(resolutions.size()), row = U(44), head = U(64);
+    int n = int(drop_.size()), row = U(44), head = U(64);
     int x0 = pr.left, x1 = pr.right, y0 = pr.top;
     int shown = std::max(1, std::min(n, int((pr.bottom - y0 - head - U(16)) / row)));
     if (drop_sel_ < drop_top_) drop_top_ = drop_sel_;
@@ -2074,16 +2164,16 @@ void Frontend::draw_drop() {
     fill(x0, y0, x1, pr.bottom, PANEL, 1);   // (the whole panel: its description must not show through)
     frame(x0, y0, x1, y1, std::max(1, U(1)), PAGE_LINE, 1);
     fill(x0, y0, x1, y0 + std::max(2, U(4)), SABER, 1);
-    text(ROW_MEDIUM, U(22), L"RESOLUTION", x0 + U(28), y0 + U(22), 0, {GROUP_BLUE, GROUP_BLUE});
+    std::wstring title;
+    for (const Item& it : items())
+        if (it.id == drop_id_) title = it.label;
+    text(ROW_MEDIUM, U(22), title, x0 + U(28), y0 + U(22), 0, {GROUP_BLUE, GROUP_BLUE});
     drop_rects_.clear();
-    const int chosen = n - 1 - resolution_index();
     for (int k = 0; k < shown && drop_top_ + k < n; k++) {
         int i = drop_top_ + k, y = y0 + head + k * row;
-        const auto& r = resolutions[size_t(n - 1 - i)];
-        bool sel = i == drop_sel_, in_use = i == chosen;
+        bool sel = i == drop_sel_, in_use = i == drop_in_use_;
         if (sel) page_band(x0 + U(30), y, x1 - U(12), y + row, 0.22f, 0.5f, 1);
-        std::wstring label = std::to_wstring(r.first) + L" x " + std::to_wstring(r.second);
-        text(ROW, U(30), label, x0 + U(52), y + row / 2 - U(30) * 75 / 100, 0,
+        text(ROW, U(30), drop_[size_t(i)].label, x0 + U(52), y + row / 2 - U(30) * 75 / 100, 0,
              sel ? Style{GOLD_TOP, GOLD_BOTTOM, 0, 0, 1, U(2)} : Style{PAGE_TEXT, PAGE_TEXT, 0, 0, 1, U(2)});
         if (in_use) text(ROW_MEDIUM, U(18), L"IN USE", x1 - U(28), y + row / 2 - U(10), 2, {GROUP_BLUE, GROUP_BLUE});
         drop_rects_.push_back({x0, y, x1, y + row});
