@@ -76,7 +76,7 @@ with no window, until macOS has its answer to a privacy prompt, and again after 
 changes. Build steps are in `docs/MACOS.md`.
 
 Ray tracing and DLAA are missing there, and Apple's GPUs make MSAA cheap, so macOS spends differently: MSAA 8x and
-16x anisotropic filtering by default, a supersampling option, a 4096 shadow map (2048 on Windows) read through a
+16x anisotropic filtering by default, RENDER SCALE up to 200 % for supersampling, a 4096 shadow map (2048 on Windows) read through a
 tent filter, and alpha-tested coverage dithered per pixel so soft alpha does not show one ring per sample
 (`PLATFORM_MAC` in `r3d.frag`).
 

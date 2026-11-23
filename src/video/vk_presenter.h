@@ -11,6 +11,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifdef __APPLE__
@@ -35,7 +36,7 @@ public:
 
     // Processes window messages; returns false once it is closed
     bool pump();
-    // Records and presents a frame with vsync. The image arrives in
+    // Records and presents a frame (with vsync unless set_vsync(0)). The image arrives in
     // COLOR_ATTACHMENT_OPTIMAL and must be left that way when done.
     void frame(const RecordFn& record);
 
@@ -47,9 +48,26 @@ public:
     // Arrays of images indexed per polygon (partially bound, non-uniform): false on the Raspberry Pi 5
     bool descriptor_indexing() const { return descriptor_indexing_; }
     HWND hwnd() const { return hwnd_; }
-    void toggle_fullscreen();
-    bool fullscreen() const { return fullscreen_; }
+    void toggle_fullscreen();   // F11 / Alt+Enter: the window, or the last full-screen mode
+    // MODE: 0 a window (w x h inside, 0: as it is), 1 borderless at the
+    // desktop's resolution, 2 exclusive full screen: the monitor set to w x h
+    // (0: the desktop's) while the game runs; if the monitor refuses it,
+    // borderless instead (mode() says so). SWT_DISPLAY_DRYRUN=1 (tests, Windows):
+    // the window stays as it is, a mode is only checked with Windows (CDS_TEST)
+    void set_mode(int mode, int w, int h);
+    int mode() const { return mode_; }
+    // The monitor's whole area, in pixels (the desktop's resolution)
+    RECT monitor_rect() const;
+    // The monitor's resolutions in pixels (its usual modes, each size once, smallest first)
+    std::vector<std::pair<int, int>> display_modes() const;
     void close() { quit_ = true; }
+    // VSYNC: 1 on (FIFO). 0 off: each image goes out as soon as it is drawn, without
+    // waiting for the monitor's refresh (tearing; mailbox if the driver has no
+    // immediate mode). 2 adaptive: FIFO_RELAXED, a late image goes out at once
+    // (FIFO if the driver lacks it). Takes effect with the next frame (a new swapchain)
+    void set_vsync(int mode) {
+        if (mode != vsync_) vsync_ = mode, resized_ = true;
+    }
 
     // Sees key presses and mouse messages first; returning true swallows
     // them (Esc then no longer closes the window)
@@ -107,6 +125,8 @@ public:
 private:
     bool create_swapchain();
     void destroy_swapchain();
+    // display_modes(): only the usual shapes, plus the desktop's mode and the largest
+    static std::vector<std::pair<int, int>> usual_modes(std::vector<std::pair<int, int>> modes, std::pair<int, int> desktop);
 #ifndef _WIN32
     bool create_window(const char* title, int width, int height);
     bool load_vulkan();
@@ -119,10 +139,17 @@ private:
 #else
     static LRESULT CALLBACK wndproc(HWND, UINT, WPARAM, LPARAM);
     WINDOWPLACEMENT placement_{sizeof(WINDOWPLACEMENT)};
+    bool changed_display_ = false;   // the monitor is in another mode (exclusive full screen)
+    bool lost_display_ = false;      // ...given back while the game lost the focus
+    void restore_display();
+    void on_activate(bool active);   // exclusive full screen: the desktop's mode while another window has the focus
 #endif
 
     HWND hwnd_ = nullptr;
     bool quit_ = false, resized_ = false, fullscreen_ = false, show_cursor_ = false;
+    int mode_ = 0, full_mode_ = 1, full_w_ = 0, full_h_ = 0;   // the mode on; the last full-screen one (F11)
+    int vsync_ = 1;
+    VkPresentModeKHR present_mode_ = VK_PRESENT_MODE_MAX_ENUM_KHR;   // of the swapchain (printed when it changes)
 
     VkInstance instance_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;

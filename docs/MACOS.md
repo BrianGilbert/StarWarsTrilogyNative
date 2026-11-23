@@ -23,10 +23,10 @@ without that folder, but its program is compiled from the ROM's code, so keep it
 
 - No ray tracing: MoltenVK has no ray queries. The sun shadows and ambient occlusion use a sharper shadow map and
   the depth instead.
-- No DLAA: MSAA 8x by default, and **Options > Display > Supersampling** for smoother still, on a fast Mac.
+- No DLAA: MSAA 8x by default, and **Options > Display > Render scale** above 100 % for smoother still, on a fast Mac.
 - One mouse: a second player uses a gamepad.
 - UPDATE NOW opens the game's page instead of updating by itself.
 
-Option+Return, Cmd+Return or F11 toggle fullscreen. On most Mac keyboards the function keys need Fn held.
+Option+Return, Cmd+Return or F11 switch between the window and full screen (**Options > Display > Mode**). On most Mac keyboards the function keys need Fn held.
 
 For how the port works, see `docs/ARCHITECTURE.md`.

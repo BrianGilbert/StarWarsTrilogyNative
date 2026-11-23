@@ -230,7 +230,7 @@ else()
 endif()
 
 # What each system does in its own way. Linux shares the Mac's Win32 names
-# (src/platform/mac: windows.h, compat.h, SDL3 sound and mice) and has its own
+# (src/platform/mac: windows.h, compat.h, SDL3 sound, mice and display modes) and has its own
 # window, text, pictures and splash video (src/platform/linux)
 set(MAC_DIR ${CMAKE_SOURCE_DIR}/src/platform/mac)
 set(LINUX_DIR ${CMAKE_SOURCE_DIR}/src/platform/linux)
@@ -238,6 +238,7 @@ if(UNIX AND NOT APPLE)
     set(PLATFORM_SOURCES
         ${LINUX_DIR}/win32_linux.cpp
         ${LINUX_DIR}/vk_window_linux.cpp
+        ${MAC_DIR}/display_mac.cpp
         ${LINUX_DIR}/image_io_linux.cpp
         ${LINUX_DIR}/splash_video_linux.cpp
         ${MAC_DIR}/raw_mice_mac.cpp
@@ -248,6 +249,7 @@ elseif(APPLE)
     set(PLATFORM_SOURCES
         ${MAC_DIR}/win32_mac.mm
         ${MAC_DIR}/vk_window_mac.cpp
+        ${MAC_DIR}/display_mac.cpp
         ${MAC_DIR}/raw_mice_mac.cpp
         ${MAC_DIR}/audio_out_mac.cpp
         ${MAC_DIR}/dlss_mac.cpp

@@ -9,12 +9,14 @@ const float BLOOM_STRENGTH[4] = {0.0f, 0.6f, 1.0f, 1.6f};
 // 21/9 = 2.33, so 21:9 allows up to 2.4. 32:9 monitors are 3.56; three
 // monitors side by side 5.33, more with bezel correction, so 48:9 allows 6.
 // The 3D view never gets wider than the window, so a level wider than the
-// monitor only leaves room
-const float MAX_ASPECT[5] = {4.0f / 3.0f, 16.0f / 9.0f, 2.4f, 3.6f, 6.0f};
+// monitor only leaves room, and AUTO (fills the window whatever its shape) is 48:9's
+const float MAX_ASPECT[6] = {4.0f / 3.0f, 16.0f / 9.0f, 2.4f, 3.6f, 6.0f, 6.0f};
 
 int aspect_level(float max_aspect) {
     return max_aspect < 1.5f ? 0 : max_aspect < 2.0f ? 1 : max_aspect < 3.0f ? 2 : max_aspect < 4.5f ? 3 : 4;
 }
+
+int aspect_level_of(int aspect) { return std::min(aspect, 4); }
 
 void options_from_settings(Options& o, const FrontendSettings& ini) {
     o.volume = float(ini.volume);
@@ -28,11 +30,9 @@ void options_from_settings(Options& o, const FrontendSettings& ini) {
     o.dlaa = ini.aa == 1;
     if (ini.aa == 2) o.msaa = 1;
 #endif
-#ifndef _WIN32   // the SUPERSAMPLING entry of the menu (macOS, Linux)
-    o.supersample = float(ini.supersample) / 100.0f;
-#endif
-    int aspect = std::clamp(ini.aspect, 0, 4);
-    if (aspect != aspect_level(o.max_aspect)) o.max_aspect = MAX_ASPECT[aspect];   // --aspect 2.6 stays as 21:9
+    o.supersample = ini.render_scale / 100.0f;   // RENDER SCALE (--scale wins)
+    int aspect = std::clamp(ini.aspect, 0, 5);
+    if (aspect_level_of(aspect) != aspect_level(o.max_aspect)) o.max_aspect = MAX_ASPECT[aspect];   // --aspect 2.6 stays as 21:9
     o.haze = ini.haze ? 1.0f : 0.0f;
     o.bloom = BLOOM_STRENGTH[ini.bloom];
     o.ao = ini.ao ? 1.0f : 0.0f;
@@ -58,10 +58,9 @@ void settings_from_options(FrontendSettings& s, const Options& o) {
 #else
     s.aa = o.dlaa ? 1 : o.msaa <= 1 ? 2 : 0;
 #endif
-#ifndef _WIN32
-    s.supersample = o.supersample >= 2.0f ? 200 : o.supersample >= 1.5f ? 150 : 100;
-#endif
-    s.aspect = aspect_level(o.max_aspect);   // --aspect 2.6 shows as 21:9 and is kept until changed
+    s.render_scale = std::clamp(int(o.supersample * 100 + 0.5f), 50, 200);
+    if (aspect_level_of(s.aspect) != aspect_level(o.max_aspect))   // (AUTO stays AUTO)
+        s.aspect = aspect_level(o.max_aspect);   // --aspect 2.6 shows as 21:9 and is kept until changed
     s.haze = o.haze > 0;
     s.bloom = o.bloom <= 0 ? 0 : o.bloom < 0.8f ? 1 : o.bloom < 1.3f ? 2 : 3;
     s.ao = o.ao > 0;
