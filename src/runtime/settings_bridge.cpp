@@ -27,8 +27,10 @@ void options_from_settings(Options& o, const FrontendSettings& ini) {
 #ifdef __APPLE__
     o.msaa = ini.aa == 1 ? 8 : ini.aa == 2 ? 1 : 4;
 #else
-    o.dlaa = ini.aa == 1;
-    if (ini.aa == 2) o.msaa = 1;
+    o.dlaa = ini.aa == 1 || (ini.aa >= 3 && ini.aa <= 6);
+    o.dlss = ini.aa >= 3 && ini.aa <= 6 ? ini.aa - 2 : 0;   // 3 QUALITY .. 6 ULTRA PERFORMANCE
+    o.fxaa = ini.aa == 7;
+    if (ini.aa == 2 || ini.aa == 7) o.msaa = 1;
 #endif
     o.supersample = ini.render_scale / 100.0f;   // RENDER SCALE (--scale wins)
     int aspect = std::clamp(ini.aspect, 0, 5);
@@ -56,7 +58,7 @@ void settings_from_options(FrontendSettings& s, const Options& o) {
 #ifdef __APPLE__
     s.aa = o.msaa >= 8 ? 1 : o.msaa <= 1 ? 2 : 0;
 #else
-    s.aa = o.dlaa ? 1 : o.msaa <= 1 ? 2 : 0;
+    s.aa = o.dlss ? 2 + std::clamp(o.dlss, 1, 4) : o.dlaa ? 1 : o.fxaa ? 7 : o.msaa <= 1 ? 2 : 0;
 #endif
     s.render_scale = std::clamp(int(o.supersample * 100 + 0.5f), 50, 200);
     if (aspect_level_of(s.aspect) != aspect_level(o.max_aspect))   // (AUTO stays AUTO)

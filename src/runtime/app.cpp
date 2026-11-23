@@ -362,12 +362,16 @@ int main(int argc, char** argv) {
     }
 
     R3DRenderer renderer;
-    if (!renderer.init(presenter, g_opt.supersample, g_opt.msaa, g_opt.aniso, g_opt.dlaa)) {
+    if (!renderer.init(presenter, g_opt.supersample, g_opt.msaa, g_opt.aniso, g_opt.dlaa, g_opt.dlss, g_opt.dlss_model)) {
         fprintf(stderr, "Could not start the 3D renderer\n");
         MessageBoxA(nullptr, "Could not start the 3D renderer. Update the graphics driver.",
                     "Star Wars Trilogy Native", MB_OK | MB_ICONERROR);
         return 1;
     }
+    // DLAA or DLSS asked for on a card without them (not an RTX): FXAA instead
+    const bool dlss_failed = g_opt.dlaa && !renderer.dlaa_active();
+    if (dlss_failed) g_opt.dlaa = false, g_opt.dlss = 0, g_opt.fxaa = true, g_opt.msaa = 1;
+    renderer.set_fxaa(g_opt.fxaa);
     renderer.set_max_aspect(g_opt.max_aspect);
     renderer.set_smooth_2d(!g_opt.pixel_2d);
     renderer.set_hud_edges(!g_opt.hud_centre);
@@ -391,9 +395,17 @@ int main(int argc, char** argv) {
     if (kAnalogJoystick && getenv("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
     renderer.set_sharpen(g_opt.sharpen ? 0.5f : 0.0f);
     if (g_opt.haze > 0) printf("[video] distance haze on (strength %.2f)\n", g_opt.haze);
-    if (g_opt.dlaa && !renderer.dlaa_active()) printf("[video] DLAA not available: using MSAA\n");
+    if (dlss_failed) printf("[video] DLAA/DLSS not available on %s: using FXAA\n", presenter.device_name().c_str());
     if (renderer.dlaa_active())
-        printf("[video] antialiasing NVIDIA DLAA, anisotropic filtering %dx%s\n", g_opt.aniso,
+        printf("[video] antialiasing NVIDIA %s, anisotropic filtering %dx%s\n",
+               !renderer.dlss_upscaling() ? "DLAA"
+               : g_opt.dlss == 2          ? "DLSS BALANCED"
+               : g_opt.dlss == 3          ? "DLSS PERFORMANCE"
+               : g_opt.dlss == 4          ? "DLSS ULTRA PERFORMANCE"
+                                          : "DLSS QUALITY",
+               g_opt.aniso, g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
+    else if (renderer.fxaa())
+        printf("[video] antialiasing FXAA, anisotropic filtering %dx%s\n", g_opt.aniso,
                g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
     else
         printf("[video] antialiasing MSAA %dx, anisotropic filtering %dx%s\n", renderer.msaa_samples(), g_opt.aniso,
@@ -554,6 +566,12 @@ int main(int argc, char** argv) {
         settings_from_options(s, g_opt);   // ...with the command-line options over it
         frontend.aa_at_launch = s.aa;
         frontend.rt_available = renderer.ray_tracing_available();
+#ifdef _WIN32   // DLAA and DLSS in the menu only on a card that runs them (an RTX)
+        frontend.dlss_available =
+            renderer.dlaa_active() || (!dlss_failed && strstr(presenter.device_name().c_str(), "RTX") != nullptr);
+#else           // (none on Linux yet)
+        frontend.dlss_available = false;
+#endif
         frontend.resolutions = presenter.display_modes();
         if (s.res_w > 0 && !frontend.resolutions.empty()) {   // a size that is not one of the monitor's modes: the nearest
             auto best = frontend.resolutions[0];
@@ -905,6 +923,9 @@ int main(int argc, char** argv) {
             else if (g_opt.interp && max_fps < 0 && !vsync)
                 step = 0;   // UNLIMITED, chosen by the player
             if (fs.background_fps && g_opt.menu && GetForegroundWindow() != presenter.hwnd()) step = std::max(step, 1.0 / 30);
+            // (dynamic resolution keeps the graphics card's time within that;
+            // UNLIMITED: none to keep to, always the full size)
+            renderer.set_gpu_budget(float(step * 1000.0));
             double now = qpc_seconds();
             if (step > 0 && due > 0 && due > now) {
                 if (due - now > 0.002) Sleep(DWORD((due - now) * 1000) - 1);

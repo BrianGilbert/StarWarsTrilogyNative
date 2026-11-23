@@ -28,7 +28,7 @@
     thousands of lights in its trenches.
   - Lightsabers, lasers and explosions light what is around them; Vader's suit shines; Boba
     Fett's desert has wind ripples.
-- **Sharp and smooth**: MSAA or NVIDIA DLAA, HD text, and the 3D drawn between the game's frames at 120 / 144 Hz and above.
+- **Sharp and smooth**: MSAA, FXAA or NVIDIA DLAA and DLSS (with dynamic resolution), HD text, and the 3D drawn between the game's frames at 120 / 144 Hz and above.
 - **Arcade sound**, with the Digital Sound Board's music and voices, and surround and headphone modes.
 - **Mouse, gamepad (gyro too), light gun or flight stick**, with aim assist and force feedback as rumble.
 - **Settings for every effect**, from laptops to RTX cards, and **achievements and stats** in Records.
@@ -64,7 +64,7 @@ the game stops at *FAILED FEEDBACK LEVER INITIALIZE*. `build.bat` says which chi
 ## Install
 
 You need Windows 10/11 (64-bit) and a GPU with a Vulkan 1.3 driver (most from 2016 on).
-DLAA needs an NVIDIA RTX; on other cards it switches itself off, and the game builds the same on any GPU.
+DLAA and DLSS need an NVIDIA RTX; on other cards ANTI-ALIASING offers FXAA instead, and the game builds the same on any GPU.
 
 Install it with **[NicoLauncher](https://github.com/snicolast/NicoLauncher-Hub)**, a free app that
 downloads, builds, updates and starts the game for you. No Visual Studio, nothing to set up by hand.

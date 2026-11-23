@@ -39,7 +39,8 @@ struct FrontendSettings {
 #ifdef __APPLE__
     int aa = 1;        // 0 MSAA 4x, 1 MSAA 8x, 2 off (takes effect on the next launch)
 #else
-    int aa = 0;        // 0 MSAA, 1 DLAA, 2 off (takes effect on the next launch)
+    int aa = 0;        // 0 MSAA, 1 DLAA, 2 off, 3 DLSS QUALITY, 4 BALANCED, 5 PERFORMANCE, 6 ULTRA PERFORMANCE,
+                       // 7 FXAA (takes effect on the next launch)
 #endif
     int render_scale = 100;  // RENDER SCALE, %: the 3D drawn at this share of the picture's size (--scale), 50..200
     bool haze = true;  // distance haze
@@ -108,6 +109,7 @@ public:
     FrontendSettings settings;
     int aa_at_launch = 0;   // anti-aliasing the renderer was started with
     bool rt_available = false;   // the GPU can trace rays (RAY TRACING option)
+    bool dlss_available = true;  // the GPU can run DLAA and DLSS (an NVIDIA RTX): otherwise ANTI-ALIASING offers FXAA instead
     std::wstring gamepads;  // the pads connected, for OPTIONS > CONTROLS > CONNECTED ("" = none)
     bool gyro_pad = false;  // one of them has a gyroscope
     bool pad_prompts = false;   // a gamepad drives the menu: its buttons in the key help and hints, not the keyboard's

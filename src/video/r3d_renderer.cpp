@@ -195,7 +195,7 @@ void R3DRenderer::transition(VkCommandBuffer cmd, Image& img, VkImageLayout to, 
     img.layout = to;
 }
 
-bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, bool dlaa) {
+bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, bool dlaa, int dlss_mode, int dlss_model) {
     vk_ = &vk;
     dev_ = vk.device();
     // Every step names itself when it fails, so a report says where it stopped (issue #36)
@@ -206,7 +206,24 @@ bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, 
     supersample_ = std::clamp(supersample, 0.5f, 4.0f);
     aniso_ = float(std::clamp(aniso, 0, 16));
     // DLAA does the anti-aliasing itself from aliased single-sample input
-    if (dlaa && dlaa_.init(vk.instance(), vk.gpu(), dev_)) msaa = 1;
+    if (dlaa && dlaa_.init(vk.instance(), vk.gpu(), dev_)) {
+        msaa = 1;
+        int mode = std::clamp(dlss_mode, 0, dlss::MODE_COUNT - 1);
+        upscale_ = dlss::MODE_SCALE[mode];   // QUALITY two thirds of the size each way ... ULTRA PERFORMANCE a third
+        jitter_phases_ = uint32_t(8.0f * upscale_ * upscale_ + 0.5f);
+        VkPhysicalDeviceProperties gpu;
+        vkGetPhysicalDeviceProperties(vk.gpu(), &gpu);
+        bool fp8 = dlss::has_fp8(gpu.deviceName);
+        dlss_preset_ = dlss::preset_for(mode, dlss_model, fp8);
+        dlaa_.set_dynamic(getenv("SWT_NO_DYNRES") == nullptr);   // (dynamic_resolution(); before configure: dlss_bridge.dll)
+        dlaa_.configure(mode, dlss_preset_);
+        printf("[dlaa] mode %d (3D %.0f%% of the size), preset %c (%s, FP8 %s), %u jitter phases\n", mode,
+               100.0f / upscale_, char('A' + dlss_preset_ - 1), dlss_model ? "chosen" : "auto", fp8 ? "yes" : "no",
+               jitter_phases_);
+    } else if (dlaa) {   // no DLSS on this card (not an RTX, or no NGX): FXAA, far cheaper than MSAA on an old card
+        msaa = 1;
+        fxaa_ = true;
+    }
     // Highest supported MSAA level not above the requested one
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(vk.gpu(), &props);
@@ -758,8 +775,9 @@ bool R3DRenderer::create_pipelines() {
     return opaque_ && translucent_ && trans_depth_ && shadow_ && rays_ && compose_measure_ && compose_ && bloom_ && ao_pass_ && ao_apply_ && ao_apply_glow_;
 }
 
-void R3DRenderer::ensure_targets(uint32_t w, uint32_t h) {
-    if (color_.image && color_.w == w && color_.h == h) return;
+void R3DRenderer::ensure_targets(uint32_t w, uint32_t h, uint32_t up_w, uint32_t up_h) {
+    if (color_.image && color_.w == w && color_.h == h && (!dlaa_out_.image || (dlaa_out_.w == up_w && dlaa_out_.h == up_h)))
+        return;
     vkDeviceWaitIdle(dev_);
     destroy_image(color_);
     destroy_image(color_ms_);
@@ -822,9 +840,10 @@ void R3DRenderer::ensure_targets(uint32_t w, uint32_t h) {
     if (dlaa) {
         create_image(motion_, w, h, VK_FORMAT_R16G16_SFLOAT,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-        create_image(dlaa_out_, w, h, VK_FORMAT_R16G16B16A16_SFLOAT,
+        // (DLSS's output: larger than the 3D image when it upscales)
+        create_image(dlaa_out_, up_w, up_h, VK_FORMAT_R16G16B16A16_SFLOAT,
                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-        create_image(dlaa_alpha_, w, h, VK_FORMAT_R8G8B8A8_UNORM,
+        create_image(dlaa_alpha_, up_w, up_h, VK_FORMAT_R8G8B8A8_UNORM,
                      VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
     }
     // Bloom: glow written by the 3D pass, then reduced to a quarter and blurred
@@ -1522,7 +1541,10 @@ struct R3DRenderer::Frame {
     VkCommandBuffer cmd;
     VkExtent2D extent;       // the window
     ScreenLayout lay;        // placement of the game screen in it
-    uint32_t out_w, out_h;   // internal 3D resolution
+    uint32_t out_w, out_h;   // internal 3D resolution: what is drawn this image
+    uint32_t full_w, full_h; // ... and the targets' size: the same, or larger with dynamic resolution
+                             // (the image in their top left corner)
+    uint32_t up_w, up_h;     // what DLSS makes of it (the same as full, but with DLSS upscaling)
     size_t vcount;           // vertices of the scene
     float before;            // motion vectors: how far back the previously displayed image was
     float jitter_x, jitter_y, alpha_seed;   // DLAA: sub-pixel shift and alpha-test noise seed
@@ -1818,7 +1840,10 @@ void R3DRenderer::record_world(const Frame& f) {
                     pc.params[2] = v.fog_start;
                     pc.params[3] = before;
                     pc.quality[0] = pass == 0 ? float(samples_) + alpha_seed : -float(samples_);
-                    pc.quality[1] = aniso_;
+                    // (its fraction: with DLSS upscaling or a smaller image of the dynamic
+                    // resolution, 1 - the share of the picture shown the 3D is drawn at: the
+                    // textures are filtered as sharp as the picture shown needs, r3d.frag)
+                    pc.quality[1] = aniso_ + std::clamp(1.0f - float(out_w) / float(f.up_w), 0.0f, 0.9f);
                     pc.quality[2] = full && (!swt_hud_ || (hud_band_ && hud_edges_)) ? 2.0f * lay.game_x0 / lay.view_w : 0.0f;
                     pc.quality[3] = interp_;
                     // Translucent surfaces that are not effects (a whole model made
@@ -1939,8 +1964,8 @@ void R3DRenderer::record_dlaa(const Frame& f) {
         bool ok = dlaa_.evaluate(cmd, {color_.image, color_.view, VK_FORMAT_R16G16B16A16_SFLOAT},
                                  {depth_.image, depth_.view, VK_FORMAT_D32_SFLOAT},
                                  {motion_.image, motion_.view, VK_FORMAT_R16G16_SFLOAT},
-                                 {dlaa_out_.image, dlaa_out_.view, VK_FORMAT_R16G16B16A16_SFLOAT}, out_w, out_h, jitter_x,
-                                 jitter_y, false);
+                                 {dlaa_out_.image, dlaa_out_.view, VK_FORMAT_R16G16B16A16_SFLOAT}, f.full_w, f.full_h,
+                                 f.up_w, f.up_h, jitter_x, jitter_y, false, 0, out_w, out_h);
         // Its alpha separately: where the 3D image is partly transparent the
         // 2D background shows through, and a jittered alpha would make every
         // edge against it shimmer (the ammo counter over the sky)
@@ -1949,8 +1974,8 @@ void R3DRenderer::record_dlaa(const Frame& f) {
         ok = ok && dlaa_.evaluate(cmd, {color_.image, color_.alpha_view, VK_FORMAT_R16G16B16A16_SFLOAT},
                                   {depth_.image, depth_.view, VK_FORMAT_D32_SFLOAT},
                                   {motion_.image, motion_.view, VK_FORMAT_R16G16_SFLOAT},
-                                  {dlaa_alpha_.image, dlaa_alpha_.view, VK_FORMAT_R8G8B8A8_UNORM}, out_w, out_h,
-                                  jitter_x, jitter_y, false, 1);
+                                  {dlaa_alpha_.image, dlaa_alpha_.view, VK_FORMAT_R8G8B8A8_UNORM}, f.full_w,
+                                  f.full_h, f.up_w, f.up_h, jitter_x, jitter_y, false, 1, out_w, out_h);
         transition(cmd, dlaa_out_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         transition(cmd, dlaa_alpha_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         if (!ok) bind_scene_image(color_.view, color_.alpha_view);   // stopped working: plain image from now on
@@ -1977,7 +2002,7 @@ R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
                            extend_back ? 1.0f : 0.0f},
                    .sky = {seconds, 0, sun_ ? 1.0f : 0.0f, 0},
                    .effects = {bloom_strength_, saturation_, gamma_, 0},
-                   .motion = {back_shift_, 0, swt_hud_ ? 1.0f : 0.0f, 0},
+                   .motion = {back_shift_, 0, swt_hud_ ? 1.0f : 0.0f, fxaa() ? 1.0f : 0.0f},
                    .crosshair2 = {-1, -1, sharpen_, 0}};
     // Space (r3d_share_world) and any world against a black backdrop (the
     // Death Star trench): the glow of lasers and engines does not depend on
@@ -2076,7 +2101,9 @@ void R3DRenderer::record_bloom(const Frame& f, const ComposePush& pc) {
             vkCmdSetViewport(cmd, 0, 1, &bv);
             VkRect2D br{{0, 0}, {st.to->w, st.to->h}};
             vkCmdSetScissor(cmd, 0, 1, &br);
-            float bp[4] = {1.0f / float(st.from->w), 1.0f / float(st.from->h), st.mode, st.spread};
+            // (the glow: its top left part drawn, with dynamic resolution)
+            float spread = st.from == &glow_ ? float(f.out_w) / float(f.full_w) : st.spread;
+            float bp[4] = {1.0f / float(st.from->w), 1.0f / float(st.from->h), st.mode, spread};
             vkCmdPushConstants(cmd, bloom_layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(bp), bp);
             vkCmdDraw(cmd, 3, 1, 0, 0);
             if (st.mode == 0 && sky_glow > 0) {
@@ -2220,18 +2247,32 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
     f.cmd = cmd;
     f.extent = extent;
     f.lay = compute_layout(float(extent.width), float(extent.height), max_aspect_);
-    f.out_w = std::max(1u, uint32_t(f.lay.view_w * f.lay.scale * supersample_));
-    f.out_h = std::max(1u, uint32_t(SCREEN_H * f.lay.scale * supersample_));
+    f.up_w = std::max(1u, uint32_t(f.lay.view_w * f.lay.scale * supersample_));
+    f.up_h = std::max(1u, uint32_t(SCREEN_H * f.lay.scale * supersample_));
+    f.full_w = upscale_ > 1.0f ? std::max(1u, uint32_t(float(f.up_w) / upscale_ + 0.5f)) : f.up_w;
+    f.full_h = upscale_ > 1.0f ? std::max(1u, uint32_t(float(f.up_h) / upscale_ + 0.5f)) : f.up_h;
     {   // (once per size: the 3D's own resolution, RENDER SCALE / --scale)
         static uint32_t logged_w = 0, logged_h = 0;
-        if (f.out_w != logged_w || f.out_h != logged_h) {
-            logged_w = f.out_w, logged_h = f.out_h;
-            printf("[video] 3D drawn at %ux%u (scale %.2f)\n", f.out_w, f.out_h, supersample_);
+        if (f.full_w != logged_w || f.full_h != logged_h) {
+            logged_w = f.full_w, logged_h = f.full_h;
+            printf("[video] 3D drawn at %ux%u, shown at %ux%u (scale %.2f)\n", f.full_w, f.full_h, f.up_w, f.up_h,
+                   supersample_);
         }
     }
-    ensure_targets(f.out_w, f.out_h);
+    ensure_targets(f.full_w, f.full_h, f.up_w, f.up_h);
+    // Dynamic resolution: this image drawn in the top left part of the
+    // targets. (The height from the width's share: the same shape, for the
+    // passes that take one share for both)
+    // (SWT_DYNRES_SCALE=F: debugging aid, always that share, to look at a smaller image)
+    static const float forced = getenv("SWT_DYNRES_SCALE") ? float(atof(getenv("SWT_DYNRES_SCALE"))) : 0.0f;
+    if (!dynamic_resolution()) dyn_scale_ = 1.0f;
+    else if (forced > 0.0f) dyn_scale_ = std::clamp(forced, 0.3f, 1.0f);
+    f.out_w = std::clamp(uint32_t(float(f.full_w) * dyn_scale_ + 0.5f), 1u, f.full_w);
+    f.out_h = std::clamp(uint32_t(float(f.full_h) * float(f.out_w) / float(f.full_w) + 0.5f), 1u, f.full_h);
+    // Timed with DLAA (the dynamic resolution needs the graphics card's
+    // time), and with SWT_GPUTIME, which also prints the averages
     static const bool gpu_time = getenv("SWT_GPUTIME") || getenv("LW_GPUTIME");
-    if (gpu_time && !gpu_times_) {
+    if ((gpu_time || dlaa_.ready()) && !gpu_times_) {
         VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
         qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
         qi.queryCount = GPU_MARKS;
@@ -2257,7 +2298,8 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
     drawn_serial_ = scene_serial_;
     drawn_interp_ = interp_;
     // DLAA: the image is shifted by a different sub-pixel amount each frame
-    // (Halton 2,3 over 8 phases) so it can gather detail between pixels
+    // (Halton 2,3 over 8 phases; when DLSS upscales 8 for each pixel it makes:
+    // jitter_phases_) so it can gather detail between pixels
     float jitter_x = 0, jitter_y = 0, alpha_seed = 0;
     if (dlaa_.ready()) {
         auto halton = [](uint32_t i, uint32_t base) {
@@ -2268,7 +2310,7 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
             }
             return r;
         };
-        uint32_t phase = uint32_t(jitter_index_++ % 8) + 1;
+        uint32_t phase = uint32_t(jitter_index_++ % jitter_phases_) + 1;
         jitter_x = halton(phase, 2) - 0.5f;
         jitter_y = halton(phase, 3) - 0.5f;
         // Alpha-tested edges (foliage): noise threshold that changes every frame
@@ -2319,6 +2361,9 @@ void R3DRenderer::gpu_time_report(uint32_t out_w, uint32_t out_h) {
     if (vkGetQueryPoolResults(dev_, gpu_times_, 0, GPU_MARKS, sizeof(t), t, 8, VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
         return;
     auto ms = [&](uint32_t from, uint32_t to) { return double(t[to] - t[from]) * timestamp_period_ * 1e-6; };
+    update_dynamic_scale(ms(GPU_START, GPU_COMPOSE));
+    static const bool print = getenv("SWT_GPUTIME") || getenv("LW_GPUTIME");
+    if (!print) return;
     for (uint32_t i = 1; i < GPU_MARKS; i++) gpu_sum_[i] += ms(i - 1, i);
     gpu_sum_[0] += ms(GPU_START, GPU_COMPOSE);   // the whole frame
     if (++gpu_frames_ < 300) return;
@@ -2333,6 +2378,45 @@ void R3DRenderer::gpu_time_report(uint32_t out_w, uint32_t out_h) {
     fflush(stdout);
     std::fill(std::begin(gpu_sum_), std::end(gpu_sum_), 0.0);
     gpu_frames_ = 0;
+}
+
+// Dynamic resolution: with DLSS's own library (not through dlss_bridge.dll)
+// and a refresh to keep to. SWT_NO_DYNRES: debugging aid, always the full size
+bool R3DRenderer::dynamic_resolution() const {
+    static const bool off = getenv("SWT_NO_DYNRES") != nullptr;
+    return !off && gpu_budget_ms_ > 0.0f && dlaa_.dynamic_resolution() && motion_pass_;
+}
+
+// The share of the 3D drawn next, from the time the graphics card took for
+// the last image. Near the end of the refresh (90% of it) down towards what
+// should take 80%, at most 8% a step (a single slow image, the graphics
+// card busy with something else for a moment, would otherwise send it
+// straight to the smallest size for a dozen images); back up a step at a
+// time once there is room, never to where the estimate is over 85%. The
+// estimate: what does not change with the size (DLAA's own share, the traced
+// structure, the composition: some 2 ms at 1440p) plus the rest as the
+// pixels drawn. Never below 70% each way (half the pixels)
+void R3DRenderer::update_dynamic_scale(double gpu_ms) {
+    if (getenv("SWT_DYNRES_SCALE")) return;   // (fixed: record)
+    if (!dynamic_resolution() || gpu_ms <= 0.0 || gpu_ms > 200.0) return;
+    const double budget = gpu_budget_ms_, fixed = 2.0;
+    const float MIN_SCALE = 0.7f;
+    double per_pixel = std::max(gpu_ms - fixed, 0.5) / (double(dyn_scale_) * dyn_scale_);   // at the full size
+    auto estimate = [&](float s) { return fixed + per_pixel * s * s; };
+    if (gpu_ms > 0.9 * budget) {
+        float s = float(std::sqrt(std::max(0.8 * budget - fixed, 0.1) / per_pixel));
+        dyn_scale_ = std::clamp(std::clamp(s, dyn_scale_ - 0.08f, dyn_scale_ - 0.02f), MIN_SCALE, 1.0f);
+        dyn_calm_ = 0;
+        return;
+    }
+    if (gpu_ms > 0.8 * budget) {
+        dyn_calm_ = 0;
+        return;
+    }
+    if (dyn_scale_ < 1.0f && ++dyn_calm_ >= 15) {
+        float s = std::min(dyn_scale_ + 0.01f, 1.0f);
+        if (estimate(s) < 0.85 * budget) dyn_scale_ = s;
+    }
 }
 
 void R3DRenderer::gpu_time_mark(VkCommandBuffer cmd, uint32_t index) {
