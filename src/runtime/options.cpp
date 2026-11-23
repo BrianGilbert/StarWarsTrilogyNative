@@ -58,6 +58,8 @@ const std::vector<Entry>& table() {
         text("--rom", "ZIP", &Options::rom_zip, "path to swtrilgy.zip (or SWT_ROM_ZIP; by default next to the exe)"),
         text("--data", "DIR", &Options::data_dir, "folder with the ROM already extracted by tools/romtool.py (data)"),
         flag("--boot", &Options::show_boot, "show the power-on screens before the SEGA logo"),
+        off("--no-trigger-rumble", &Options::trigger_rumble,
+            "no rumble in the triggers of Xbox One / Series pads (they are then read through XInput)"),
         section("Picture"),
         real("--scale", &Options::supersample, "internal 3D resolution multiplied by F (1)"),
         num("--msaa", &Options::msaa, "samples per pixel (4; 1 = no MSAA)"),

@@ -58,6 +58,7 @@ struct FrontendSettings {
     bool gyro = false;      // the gamepad's gyroscope moves the sight (CONTROLS > GYRO AIM turns it on)
     int gyro_speed = 5;     // 1..10
     int vibration = 2;      // gamepad vibration: 0 off, 1 low, 2 medium, 3 high
+    int trigger_rumble = 100;   // the triggers' own motors (Xbox One / Series pads), % of VIBRATION's strength, steps of 10
     int aim_assist = 1;     // gamepad aim assist: 0 off, 1 low, 2 medium, 3 high
     bool pad_lever = false; // the gamepad's sticks are the flight lever (back to the centre when let go)
     int pad_invert = 0;     // the sticks' axes turned round: 0 off, 1 x, 2 y, 3 both
@@ -138,7 +139,7 @@ private:
         // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
         OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
         OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
-        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION, OPT_VSYNC, OPT_MAXFPS, OPT_BGFPS,
+        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION, OPT_VSYNC, OPT_MAXFPS, OPT_BGFPS, OPT_TRIGGERS,
     };
     struct Item {
         Id id;

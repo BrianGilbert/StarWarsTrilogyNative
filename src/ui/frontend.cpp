@@ -177,6 +177,7 @@ void FrontendSettings::load(const char* path) {
         else if (k == "pad_speed") pad_speed = std::clamp(atoi(value), 1, 10);
         else if (k == "gyro") gyro = on;
         else if (k == "gyro_speed") gyro_speed = std::clamp(atoi(value), 1, 10);
+        else if (k == "trigger_rumble") trigger_rumble = std::clamp(atoi(value) / 10 * 10, 0, 100);
         else if (k == "vibration") vibration = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : 0;
         else if (k == "aim_assist") aim_assist = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : 0;
         else if (k == "splash_screens") splash = on;
@@ -221,6 +222,7 @@ void FrontendSettings::save(const char* path) const {
     fprintf(f, "duel_invert = %s\n", INVERT[duel_invert]);
     fprintf(f, "aspect = %s\n", ASPECT_WORDS[aspect]);
     fprintf(f, "explosions = %s\n", explosions ? "enhanced" : "arcade");
+    fprintf(f, "trigger_rumble = %d\n", trigger_rumble);
     fprintf(f, "render_scale = %d\n", render_scale);
     fprintf(f, "check_updates = %d\nnews_seen = %d\n", check_updates, news_seen);
     fclose(f);
@@ -351,7 +353,7 @@ const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_SIGHT, CONTROLS_TAB, L"SIGHT"}, {OPT_POINTER, CONTROLS_TAB},
     {OPT_PAD_AIM, CONTROLS_TAB, L"GAMEPAD"}, {OPT_PAD_SPEED, CONTROLS_TAB}, {OPT_PAD_INVERT, CONTROLS_TAB}, {OPT_ASSIST, CONTROLS_TAB},
     {OPT_GYRO, CONTROLS_TAB, L"GYRO"}, {OPT_GYRO_SPEED, CONTROLS_TAB},
-    {OPT_VIBRATION, CONTROLS_TAB, L"RUMBLE"},
+    {OPT_VIBRATION, CONTROLS_TAB, L"RUMBLE"}, {OPT_TRIGGERS, CONTROLS_TAB},
     {OPT_DUEL_INVERT, CONTROLS_TAB, L"DUELS"},
 };
 
@@ -575,6 +577,8 @@ std::vector<Frontend::Item> Frontend::items() const {
                  L"How far the sight moves when you turn the gamepad"},
                 {OPT_VIBRATION, L"VIBRATION", BLOOM_LEVELS[settings.vibration],
                  L"The gamepad rumbles when you fire and when you are hit"},
+                {OPT_TRIGGERS, L"TRIGGER RUMBLE", settings.trigger_rumble ? std::to_wstring(settings.trigger_rumble) + L"%" : std::wstring(L"OFF"),
+                 L"Xbox One / Series pads: the trigger kicks when you fire, the other when you reload (a share of VIBRATION)"},
                 {OPT_ASSIST, L"AIM ASSIST", BLOOM_LEVELS[settings.aim_assist],
                  L"With a gamepad the sight slows down over the enemy ships and follows them a little"},
                 {OPT_CONNECTED, L"CONNECTED", connected,
@@ -752,6 +756,11 @@ void Frontend::activate(const Item& it, int dir) {
         push(Action::SettingsChanged);
         break;
     case OPT_VIBRATION: settings.vibration = (settings.vibration + dir + 4) % 4; push(Action::SettingsChanged); break;
+    case OPT_TRIGGERS:   // OFF..100 % in steps of 10; a click past the top starts again from OFF
+        settings.trigger_rumble = dir > 0 && settings.trigger_rumble >= 100 && wrap_
+                                      ? 0 : std::clamp(settings.trigger_rumble + 10 * dir, 0, 100);
+        push(Action::SettingsChanged);
+        break;
     case OPT_ASSIST: settings.aim_assist = (settings.aim_assist + dir + 4) % 4; push(Action::SettingsChanged); break;
     case OPT_SAT:   // 0..200 % in steps of 10; a click past the top starts again from the bottom
         settings.saturation = dir > 0 && settings.saturation >= 200 && wrap_

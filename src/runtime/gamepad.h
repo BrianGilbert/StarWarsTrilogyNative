@@ -36,6 +36,7 @@ struct GamepadSettings {
     int assist = 1;        // aim assist: 0 off, 1 low, 2 medium, 3 high
     bool lever = false;    // the sticks are the flight lever itself (back to the centre when let go), as on the cabinet
     int invert = 0;        // the sticks' axes turned round: bit 0 x, bit 1 y
+    int trigger_rumble = 100;   // the triggers' own motors (Xbox One / Series pads), % of the vibration's strength
 };
 
 // Something to shoot at, as a box in fractions of the original 4:3 screen
@@ -62,6 +63,10 @@ public:
 
     bool init();   // false: no gamepads this run (the game works without them)
     void shutdown();
+    // Trigger rumble asks SDL to open Xbox pads through raw input (with
+    // Windows.Gaming.Input, which drives the trigger motors) instead of
+    // XInput, which cannot: init() reads it (--no-trigger-rumble: off)
+    bool trigger_rumble = true;
     // Reads the pads. `focused`: the window is in front (otherwise the pads
     // are idle); `menu`: a menu has the controls, so the d-pad, the left stick
     // and the buttons become PadKeys and the sight stays where it is
@@ -76,7 +81,8 @@ public:
     // What is on screen to shoot at, for the aim assist (each new game frame)
     void set_targets(std::vector<AimTarget> targets) { targets_ = std::move(targets); }
     // Vibration, 0..1 per motor, scaled by the settings' strength; the
-    // triggers' own motors where the pad has them (Xbox One and later)
+    // triggers' own motors where the pad has them (Xbox One and later; also
+    // scaled by TRIGGER RUMBLE, nothing on pads without them)
     void rumble(int i, float low, float high, int ms);
     void rumble_triggers(int i, float left, float right, int ms);
 
@@ -86,6 +92,7 @@ private:
         SDL_Joystick* joy = nullptr;   // a flight stick or other joystick that is no gamepad (pad null)
         uint32_t id = 0;
         bool nintendo = false;   // A on the right: accept and back swap
+        bool trigger_motors = false;   // SDL can drive the motors in its triggers
         bool buttons[32] = {}, left_trigger = false, right_trigger = false;
         float full_tilt = 0;     // seconds with a stick held all the way
         // Gyroscope: sight motion gathered since the last poll, the bias
