@@ -296,6 +296,8 @@ private:
     void update_dynamic_scale(double gpu_ms);
     float gpu_budget_ms_ = 0.0f;
     float dyn_scale_ = 1.0f;
+    float dyn_min_ = 0.7f;        // the smallest share: 70%, or more where DLSS takes no less (record)
+    double dyn_fixed_ms_ = 2.0;   // the time that does not shrink with the size drawn (DLSS, composition)
     int dyn_calm_ = 0;   // images in a row with room to spare
     Image rays_a_, rays_b_;            // light shafts: mask, then smeared towards the sun (quarter size)
     VkDescriptorSet rays_set_ = VK_NULL_HANDLE;   // source: rays_a_
