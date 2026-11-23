@@ -167,6 +167,7 @@ void FrontendSettings::load(const char* path) {
             else if (v == "dlss_balanced") aa = 4;
             else if (v == "dlss_performance") aa = 5;
             else if (v == "dlss_ultra") aa = 6;
+            else if (v == "fxaa") aa = 7;
 #endif
         }
         else if (k == "render_scale" || k == "supersample") render_scale = std::clamp(atoi(value), 50, 200);   // (supersample: before 50-200 %)
@@ -207,9 +208,12 @@ void FrontendSettings::load(const char* path) {
 #ifdef __APPLE__
 constexpr int AA_COUNT = 3;
 constexpr int AA_ORDER[AA_COUNT] = {0, 1, 2};
+const wchar_t* const AA_NAMES[AA_COUNT] = {L"MSAA 4X", L"MSAA 8X", L"OFF"};   // no DLAA without NVIDIA: 1 is MSAA 8x here
 #else
-constexpr int AA_COUNT = 7;
-constexpr int AA_ORDER[AA_COUNT] = {2, 0, 1, 3, 4, 5, 6};   // OFF, MSAA, DLAA, DLSS QUALITY .. ULTRA PERFORMANCE
+constexpr int AA_COUNT = 8;
+constexpr int AA_ORDER[AA_COUNT] = {2, 7, 0, 1, 3, 4, 5, 6};   // OFF, FXAA, MSAA, DLAA, DLSS QUALITY .. ULTRA PERFORMANCE
+const wchar_t* const AA_NAMES[AA_COUNT] = {L"MSAA 4X", L"DLAA", L"OFF", L"DLSS QUALITY", L"DLSS BALANCED",
+                                           L"DLSS PERFORMANCE", L"DLSS ULTRA PERFORMANCE", L"FXAA"};
 const wchar_t* const AA_HINT[AA_COUNT] = {
     L"Edge smoothing, works on any graphics card.  Applies on the next start",
     L"NVIDIA RTX: AI edge smoothing at full resolution, the sharpest.  Applies on the next start",
@@ -218,6 +222,7 @@ const wchar_t* const AA_HINT[AA_COUNT] = {
     L"NVIDIA RTX: the 3D drawn at 58% and rebuilt.  Applies on the next start",
     L"NVIDIA RTX: the 3D drawn at half size, for 4K.  Applies on the next start",
     L"NVIDIA RTX: the 3D drawn at a third, for 8K or slow cards.  Applies on the next start",
+    L"Light edge smoothing over the finished picture: very cheap, for older graphics cards.  Applies on the next start",
 };
 #endif
 
@@ -227,7 +232,8 @@ void FrontendSettings::save(const char* path) const {
 #ifdef __APPLE__
     static const char* const AA[3] = {"msaa", "msaa8", "none"};
 #else
-    static const char* const AA[AA_COUNT] = {"msaa", "dlaa", "none", "dlss", "dlss_balanced", "dlss_performance", "dlss_ultra"};
+    static const char* const AA[AA_COUNT] = {"msaa", "dlaa", "none", "dlss", "dlss_balanced", "dlss_performance", "dlss_ultra",
+                                             "fxaa"};
 #endif
     static const char* const BLOOM[4] = {"off", "low", "medium", "high"};   // also the vibration and aim assist levels
     static const char* const SPEAKERS[3] = {"stereo", "surround", "headphones"};
@@ -428,12 +434,6 @@ constexpr int DEBUG_STAGE_COUNT = int(sizeof(DEBUG_STAGES) / sizeof(DEBUG_STAGES
 
 std::vector<Frontend::Item> Frontend::items() const {
     auto on_off = [](bool v) { return std::wstring(v ? L"ON" : L"OFF"); };
-#ifdef __APPLE__
-    static const wchar_t* const AA[3] = {L"MSAA 4X", L"MSAA 8X", L"OFF"};   // no DLAA without NVIDIA: 1 is MSAA 8x here
-#else
-    static const wchar_t* const AA[AA_COUNT] = {L"MSAA 4X", L"DLAA", L"OFF", L"DLSS QUALITY", L"DLSS BALANCED",
-                                                L"DLSS PERFORMANCE", L"DLSS ULTRA PERFORMANCE"};
-#endif
     static const wchar_t* const BLOOM_LEVELS[4] = {L"OFF", L"LOW", L"MEDIUM", L"HIGH"};
     static const wchar_t* const INVERT_TEXT[4] = {L"OFF", L"HORIZONTAL", L"VERTICAL", L"BOTH"};
     static const wchar_t* const SPEAKERS[3] = {L"STEREO", L"SURROUND 4.0", L"HEADPHONES"};
@@ -556,7 +556,7 @@ std::vector<Frontend::Item> Frontend::items() const {
                  L"Louder rear speakers, as the cabinet's seat speakers: engines roaring past and explosions"},
                 {OPT_SAMPLES, L"SAMPLE QUALITY", settings.cubic_samples ? L"SMOOTH" : L"ORIGINAL",
                  L"Smooth interpolation of the instrument and voice samples, or the original chip's"},
-                {OPT_AA, L"ANTI-ALIASING", AA[settings.aa], aa_hint},
+                {OPT_AA, L"ANTI-ALIASING", AA_NAMES[std::clamp(settings.aa, 0, AA_COUNT - 1)], aa_hint},
                 {OPT_SCALE, L"RENDER SCALE", std::to_wstring(settings.render_scale) + L"%",
                  L"The 3D drawn at this share of the picture's size: above 100% sharper and slower, below faster and softer"},
                 {OPT_HAZE, L"DISTANCE HAZE", on_off(settings.haze),
@@ -750,7 +750,15 @@ void Frontend::activate(const Item& it, int dir) {
         int at = 0;
         for (int i = 0; i < AA_COUNT; i++)
             if (AA_ORDER[i] == settings.aa) at = i;
-        settings.aa = AA_ORDER[(at + dir + AA_COUNT) % AA_COUNT];
+        for (int n = 0; n < AA_COUNT; n++) {
+            at = (at + dir + AA_COUNT) % AA_COUNT;
+#ifndef __APPLE__   // DLAA and DLSS only on a card that runs them (dlss_available), FXAA only on one that does not
+            bool nvidia_only = AA_ORDER[at] == 1 || (AA_ORDER[at] >= 3 && AA_ORDER[at] <= 6);
+            if (dlss_available ? AA_ORDER[at] == 7 : nvidia_only) continue;
+#endif
+            break;
+        }
+        settings.aa = AA_ORDER[at];
         push(Action::SettingsChanged);
         break;
     }
@@ -2106,12 +2114,6 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
 // ---- RESTART THE GAME? ----
 
 std::wstring Frontend::restart_list() const {
-#ifdef __APPLE__
-    static const wchar_t* const AA_NAMES[3] = {L"MSAA 4X", L"MSAA 8X", L"OFF"};
-#else
-    static const wchar_t* const AA_NAMES[AA_COUNT] = {L"MSAA 4X", L"DLAA", L"OFF", L"DLSS QUALITY", L"DLSS BALANCED",
-                                                      L"DLSS PERFORMANCE", L"DLSS ULTRA PERFORMANCE"};
-#endif
     if (settings.aa != aa_at_launch)
         return std::wstring(L"ANTI-ALIASING ") + AA_NAMES[std::clamp(settings.aa, 0, AA_COUNT - 1)];
     return L"";

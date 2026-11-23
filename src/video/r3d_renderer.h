@@ -128,6 +128,9 @@ public:
     void set_relief_range(float units) { relief_range_ = units; }   // how far the surface detail reaches (world units)
     // Contrast adaptive sharpening of the 3D image: 0 = off, 1 = strongest
     void set_sharpen(float amount) { sharpen_ = amount; }
+    // FXAA over the finished 3D image (compose.frag): cheap edge smoothing for cards without DLAA
+    void set_fxaa(bool on) { fxaa_ = on; }
+    bool fxaa() const { return fxaa_ && !dlaa_.ready(); }
     // RENDER SCALE: the 3D drawn at this factor of the picture's size (0.5..4; the targets are made again)
     void set_supersample(float factor) { supersample_ = std::clamp(factor, 0.5f, 4.0f); }
     // A procedural night sky behind a world the game leaves on a black
@@ -250,6 +253,7 @@ private:
     bool relief_ = false;
     float relief_range_ = 120.0f;
     float sharpen_ = 0;
+    bool fxaa_ = false;
     bool night_sky_ = false;
     float trench_fade_ = 0, trench_far_ = 0;   // the Death Star trench's fade into the dark: amount, distance
     // Procedural space: the star field's axes in the previous and the latest game frame

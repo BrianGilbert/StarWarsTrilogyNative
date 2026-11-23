@@ -368,6 +368,10 @@ int main(int argc, char** argv) {
                     "Star Wars Trilogy Native", MB_OK | MB_ICONERROR);
         return 1;
     }
+    // DLAA or DLSS asked for on a card without them (not an RTX): FXAA instead
+    const bool dlss_failed = g_opt.dlaa && !renderer.dlaa_active();
+    if (dlss_failed) g_opt.dlaa = false, g_opt.dlss = 0, g_opt.fxaa = true, g_opt.msaa = 1;
+    renderer.set_fxaa(g_opt.fxaa);
     renderer.set_max_aspect(g_opt.max_aspect);
     renderer.set_smooth_2d(!g_opt.pixel_2d);
     renderer.set_hud_edges(!g_opt.hud_centre);
@@ -391,7 +395,7 @@ int main(int argc, char** argv) {
     if (kAnalogJoystick && getenv("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
     renderer.set_sharpen(g_opt.sharpen ? 0.5f : 0.0f);
     if (g_opt.haze > 0) printf("[video] distance haze on (strength %.2f)\n", g_opt.haze);
-    if (g_opt.dlaa && !renderer.dlaa_active()) printf("[video] DLAA not available: using MSAA\n");
+    if (dlss_failed) printf("[video] DLAA/DLSS not available on %s: using FXAA\n", presenter.device_name().c_str());
     if (renderer.dlaa_active())
         printf("[video] antialiasing NVIDIA %s, anisotropic filtering %dx%s\n",
                !renderer.dlss_upscaling() ? "DLAA"
@@ -400,6 +404,9 @@ int main(int argc, char** argv) {
                : g_opt.dlss == 4          ? "DLSS ULTRA PERFORMANCE"
                                           : "DLSS QUALITY",
                g_opt.aniso, g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
+    else if (renderer.fxaa())
+        printf("[video] antialiasing FXAA, anisotropic filtering %dx%s\n", g_opt.aniso,
+               g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
     else
         printf("[video] antialiasing MSAA %dx, anisotropic filtering %dx%s\n", renderer.msaa_samples(), g_opt.aniso,
                g_opt.aniso > 0 ? " with mipmaps" : " (no mipmaps)");
@@ -559,6 +566,12 @@ int main(int argc, char** argv) {
         settings_from_options(s, g_opt);   // ...with the command-line options over it
         frontend.aa_at_launch = s.aa;
         frontend.rt_available = renderer.ray_tracing_available();
+#ifdef _WIN32   // DLAA and DLSS in the menu only on a card that runs them (an RTX)
+        frontend.dlss_available =
+            renderer.dlaa_active() || (!dlss_failed && strstr(presenter.device_name().c_str(), "RTX") != nullptr);
+#else           // (none on Linux yet)
+        frontend.dlss_available = false;
+#endif
         frontend.resolutions = presenter.display_modes();
         if (s.res_w > 0 && !frontend.resolutions.empty()) {   // a size that is not one of the monitor's modes: the nearest
             auto best = frontend.resolutions[0];

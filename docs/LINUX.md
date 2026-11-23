@@ -62,7 +62,7 @@ The arm64 build is made with the Raspberry Pi 5 in mind (built on it with `./bui
 ## Compared with Windows
 
 - Ray tracing works as on Windows, with a driver that has ray queries (NVIDIA, recent AMD and Intel with Mesa).
-- No DLAA yet: picking it uses MSAA, as on a GPU without it. **Options > Display > Render scale** above 100 % draws the
+- No DLAA or DLSS yet: **Options > Display > Anti-aliasing** offers FXAA (cheap) and MSAA. **Options > Display > Render scale** above 100 % draws the
   3D larger and scales it down, for smoother edges still on a fast GPU (below 100 %: faster).
 - No splash video: the splash picture shows in its place.
 - One mouse: a second player uses a gamepad.

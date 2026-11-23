@@ -220,6 +220,9 @@ bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, 
         printf("[dlaa] mode %d (3D %.0f%% of the size), preset %c (%s, FP8 %s), %u jitter phases\n", mode,
                100.0f / upscale_, char('A' + dlss_preset_ - 1), dlss_model ? "chosen" : "auto", fp8 ? "yes" : "no",
                jitter_phases_);
+    } else if (dlaa) {   // no DLSS on this card (not an RTX, or no NGX): FXAA, far cheaper than MSAA on an old card
+        msaa = 1;
+        fxaa_ = true;
     }
     // Highest supported MSAA level not above the requested one
     VkPhysicalDeviceProperties props;
@@ -1999,7 +2002,7 @@ R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
                            extend_back ? 1.0f : 0.0f},
                    .sky = {seconds, 0, sun_ ? 1.0f : 0.0f, 0},
                    .effects = {bloom_strength_, saturation_, gamma_, 0},
-                   .motion = {back_shift_, 0, swt_hud_ ? 1.0f : 0.0f, 0},
+                   .motion = {back_shift_, 0, swt_hud_ ? 1.0f : 0.0f, fxaa() ? 1.0f : 0.0f},
                    .crosshair2 = {-1, -1, sharpen_, 0}};
     // Space (r3d_share_world) and any world against a black backdrop (the
     // Death Star trench): the glow of lasers and engines does not depend on
