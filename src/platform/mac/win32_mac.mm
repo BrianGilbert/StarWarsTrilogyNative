@@ -306,6 +306,7 @@ namespace {
 struct LoadedFont {
     CGFontRef font;
     std::string family;   // letters and digits only, lower case
+    std::string full;     // with the style: "barlowcondensedsemibold" (one family in several files)
 };
 std::vector<LoadedFont> g_loaded_fonts;
 
@@ -360,22 +361,30 @@ HANDLE AddFontMemResourceEx(void* data, DWORD size, void*, DWORD* count) {
     if (!font) return nullptr;
     CTFontRef ct = CTFontCreateWithGraphicsFont(font, 16, nullptr, nullptr);
     CFStringRef family = CTFontCopyFamilyName(ct);
-    char name[256] = {};
+    char name[256] = {}, style[128] = {};
     CFStringGetCString(family, name, sizeof(name), kCFStringEncodingUTF8);
     CFRelease(family);
+    if (CFStringRef st = CTFontCopyName(ct, kCTFontStyleNameKey)) {
+        CFStringGetCString(st, style, sizeof(style), kCFStringEncodingUTF8);
+        CFRelease(st);
+    }
     CFRelease(ct);
-    g_loaded_fonts.push_back({font, font_key(name)});
+    g_loaded_fonts.push_back({font, font_key(name), font_key(std::string(name) + style)});
     if (count) *count = 1;
     return font;
 }
 
 // Windows calls a face by more of its name ("Saira ExtraCondensed ExCond" for
-// the family "Saira ExtraCondensed"), so the longest family it starts with wins
+// the family "Saira ExtraCondensed"), so the longest family it starts with
+// wins; a family with its style ("Barlow Condensed SemiBold") that one file exactly
 HFONT CreateFontW(int height, int, int, int, int, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, const wchar_t* face) {
     std::string want = font_key(narrow(face));
     const LoadedFont* best = nullptr;
     for (const LoadedFont& f : g_loaded_fonts)
-        if (want.rfind(f.family, 0) == 0 && (!best || f.family.size() > best->family.size())) best = &f;
+        if (want == f.full && !best) best = &f;
+    if (!best)
+        for (const LoadedFont& f : g_loaded_fonts)
+            if (want.rfind(f.family, 0) == 0 && (!best || f.family.size() > best->family.size())) best = &f;
     LONG px = std::abs(height);
     auto* m = new MacFont{nullptr, px};
     if (best) m->font = CTFontCreateWithGraphicsFont(best->font, CGFloat(px), nullptr, nullptr);

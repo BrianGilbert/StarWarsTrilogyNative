@@ -5,6 +5,8 @@ Fonts, bajo la SIL Open Font License 1.1 (se pueden redistribuir):
   INSERT COIN, CREDITS, FREE PLAY y sus números.
 - BarlowCondensed-Bold.ttf, BarlowCondensed-BoldItalic.ttf: Barlow, de Jeremy
   Tribby (OFL-Barlow.txt). Marcador y carteles de los jefes.
+- BarlowCondensed-SemiBold.ttf, BarlowCondensed-Medium.ttf, Barlow-Regular.ttf:
+  Barlow (OFL-Barlow.txt). Página de opciones del menú (src/ui/frontend.cpp).
 - Orbitron[wght].ttf: Orbitron, de Matt McInerney (OFL-Orbitron.txt). Pantalla
   STAGE SELECT (tools/make_backdrop.py).
 - Exo2-Italic[wght].ttf, Exo2[wght].ttf: Exo 2, de Natanael Gama (OFL-Exo2.txt).
@@ -16,6 +18,3 @@ Fonts, bajo la SIL Open Font License 1.1 (se pueden redistribuir):
 - Arimo[wght].ttf: Arimo, de Steve Matteson (OFL-Arimo.txt). Frases del tutorial.
 - ShareTechMono-Regular.ttf: Share Tech Mono, de Carrois Type Design
   (OFL-ShareTechMono.txt). Menús de test y avisos.
-
-Jurassic_Park.ttf (títulos de fase y menú) no se versiona: es gratuita solo
-para uso personal y hay que copiarla aquí a mano.

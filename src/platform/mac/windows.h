@@ -149,6 +149,8 @@ inline HRESULT DwmGetCompositionTimingInfo(HWND, DWM_TIMING_INFO*) { return E_FA
 
 // ---- GDI: text into a 32-bit top-down bitmap ----
 #define FW_NORMAL 400
+#define FW_MEDIUM 500
+#define FW_SEMIBOLD 600
 #define FW_BOLD 700
 #define DEFAULT_CHARSET 1u
 #define OUT_TT_ONLY_PRECIS 7u
