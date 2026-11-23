@@ -1,11 +1,11 @@
-// PC front end: main menu (Play, Options, Quit) shown at launch instead of
-// the arcade attract loop, and the pause menu Esc opens during the game.
+// PC front end: main menu (Play, Options, Records, Quit) shown at launch
+// instead of the arcade attract loop, and the pause menu Esc opens during the game.
 //
 // Drawn on the CPU into a full-window BGRA picture (premultiplied alpha) with
-// the OFL fonts in third_party/fonts and the game's yellow-to-orange letter
-// colours; video/ui_overlay.h puts it on screen. Driven by the keyboard
-// (arrows, Enter, Esc), by the mouse/gun (point and click, wheel) and by the
-// gamepads (app.cpp turns what they send into keys).
+// the OFL fonts in third_party/fonts; the settings page and the records in
+// Sega Rally 2's layout, in lightsaber blue. video/ui_overlay.h puts it on
+// screen. Driven by the keyboard (arrows, Enter, Esc), by the mouse/gun (point
+// and click, wheel) and by the gamepads (app.cpp turns what they send into keys).
 #pragma once
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -40,20 +40,13 @@ struct FrontendSettings {
     bool haze = true;  // distance haze
     int bloom = 2;     // glow around bright things: 0 off, 1 low, 2 medium, 3 high
     bool ao = true;    // ambient occlusion
-    bool sky = true;   // procedural sky instead of the original picture
     bool sun = true;   // a sun in the procedural sky
     bool shadows = true;   // sun shadows
     int ray_tracing = 2;   // traced through the world (GPUs with ray tracing): 0 off, 1 sun shadows, 2 also ambient occlusion
-    bool shafts = true;    // light shafts from the sun
-    bool soft = true;      // soft particles
     bool explosions = true;    // EXPLOSIONS: ENHANCED (new fireballs, sparks and debris; Yavin)
     bool hdr = true;       // HDR lighting
-    bool relief = true;    // surface detail from the textures
     bool sharpen = true;   // contrast adaptive sharpening
-    bool hd_text = true;
-    bool crosshair = true;
     bool smooth = true;     // the 3D drawn between game frames at the monitor's refresh rate
-    bool second_mouse = true;   // a second mouse is player 2's gun
     int saturation = 80;    // colour saturation in % (100 = original; 80 by default)
     int gamma = 100;        // gamma x 100 (100 = original, higher = brighter)
     int pad_speed = 5;      // gamepad sight speed with the sticks, 1..10
@@ -73,17 +66,12 @@ struct FrontendSettings {
 
     // save/settings.ini; missing keys keep their current value
     void load(const char* path);
-    // QUALITY: the graphics options that cost the most, set together.
-    // quality() is the level they match, CUSTOM if none
-    enum Quality { LOW, MEDIUM, HIGH, ULTRA, CUSTOM };
-    void set_quality(int q);
-    int quality() const;
     void save(const char* path) const;
 };
 
 class Frontend {
 public:
-    enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug, Extra };
+    enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug };
     enum class Action { None, StartArcade, Resume, Quit, ToggleFullscreen, SettingsChanged,
                         QuitToMenu, StartDebug };
 
@@ -112,7 +100,7 @@ public:
     FrontendSettings settings;
     int aa_at_launch = 0;   // anti-aliasing the renderer was started with
     bool rt_available = false;   // the GPU can trace rays (RAY TRACING option)
-    std::wstring gamepads;  // the pads connected, for the CONTROLS tab ("" = none)
+    std::wstring gamepads;  // the pads connected, for OPTIONS > CONTROLS > CONNECTED ("" = none)
     bool gyro_pad = false;  // one of them has a gyroscope
     bool pad_prompts = false;   // a gamepad drives the menu: its buttons in the key help and hints, not the keyboard's
 
@@ -137,16 +125,17 @@ public:
 private:
     enum Id {
         PLAY, OPTIONS, QUIT, ARCADE, BACK, RESUME, SETTINGS, QUIT_TO_MENU, TABS,
-        RECORDS, DEBUG, DEBUG_STAGE, DEBUG_PHASE,
-        OPT_QUALITY, OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SKY, OPT_SUN, OPT_SHADOWS, OPT_SHAFTS, OPT_SOFT, OPT_HDR, OPT_RELIEF, OPT_SHARPEN, OPT_TEXT, OPT_CROSS, OPT_MICE,
-        OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, EXTRA, DOGFIGHT, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
-        OPT_ASPECT, OPT_EXPLOSIONS,
+        RECORDS, REC_ROW, DEBUG, DEBUG_STAGE, DEBUG_PHASE, DOGFIGHT,
+        // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
+        OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
+        OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
+        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED,
     };
     struct Item {
         Id id;
         std::wstring label, value, hint;
         bool enabled = true;
-        int index = -1;   // DEBUG_STAGE / DEBUG_PHASE: which one
+        int index = -1;   // DEBUG_STAGE / DEBUG_PHASE: which one; REC_ROW: its group (RECORD_GROUPS)
     };
     struct Mask {   // text coverage (0..255) with `pad` pixels around the text box
         int w = 0, h = 0, pad = 0, text_w = 0, text_h = 0;
@@ -160,9 +149,8 @@ private:
         float alpha = 1;
         int shadow = 0;         // drop shadow offset (pixels), black
     };
-    enum Family { TITLE, ITEM, MONO, JURASSIC };
-    // Titles and menu entries: the Jurassic Park font when it is installed
-    Family display() const { return jurassic_ ? JURASSIC : TITLE; }
+    // ROW, ROW_MEDIUM and BODY: the settings page's rows, group headings and descriptions (as Sega Rally 2's)
+    enum Family { TITLE, ITEM, MONO, ROW, ROW_MEDIUM, BODY };
 
     std::vector<Item> items() const;
     void activate(const Item& it, int dir);
@@ -179,12 +167,13 @@ private:
     int text(Family f, int px, const std::wstring& s, int x, int y, int align, const Style& st);
     int measure(Family f, int px, const std::wstring& s);
     void fill(int x0, int y0, int x1, int y1, uint32_t rgb, float alpha);
-    void band(int cx, int y0, int y1, int half_w, uint32_t rgb, float alpha);
     void triangle(int x, int y, int size, int dir, uint32_t rgb, float alpha);
     void blend(int x, int y, uint32_t rgb, float a);
-    void background();
     void saber(int cx, int y, int half_w);   // a glowing lightsaber-blue line
     void hgrad(int x0, int y0, int x1, int y1, uint32_t rgb, float a0, float a1);
+    // The settings page's band behind the open section and the chosen row: saber
+    // blue fading from a0 at the left to a1 at the right, a bright blade before it
+    void page_band(int x0, int y0, int x1, int y1, float a0, float a1, float alpha);
     void vgrad(int x0, int y0, int x1, int y1, uint32_t rgb, float a0, float a1);
     void frame(int x0, int y0, int x1, int y1, int t, uint32_t rgb, float alpha);
     void pill(int x0, int y0, int x1, int y1, uint32_t rgb, float alpha);
@@ -197,7 +186,6 @@ private:
         int w = 0, h = 0;
     };
     Picture backdrop_, logo_, credit_;
-    bool has_backdrop() const { return backdrop_.w > 0; }
     void picture(const Picture& p, int x0, int y0, int x1, int y1, float anchor_x = 0.5f);   // covering the box, opaque
     void sprite(const Picture& p, int x0, int y0, int w, int h);      // with its transparency
     // The gamepad's buttons in the key help (res/pad/<button>.png, CC0); w = 0:
@@ -210,9 +198,22 @@ private:
     void prompt(int& x, int y, int h, const wchar_t* pad_button, const wchar_t* key, const wchar_t* what);
     int prompt_width(int h, const wchar_t* pad_button, const wchar_t* key, const wchar_t* what);
     void backdrop_background();
-    // Main, Play, Boss, Survival and Debug on the backdrop: a column at the right under the logo
+    // Main, Play, Debug and the pause: a column at the right under the logo
     void draw_side_menu(const std::vector<Item>& list);
     void shade_backdrop();            // darker at the right and the bottom, the logo: on px_
+    // OPTIONS, SETTINGS (over the paused game) and RECORDS, as Sega Rally 2's page:
+    // the sections in a column at the left, the open one's rows in their groups,
+    // a panel at the right with what the chosen row is and does, the keys at the bottom
+    void draw_options_page(const std::vector<Item>& list, bool over_game);
+    // The settings page's bands glide from one row (or section) to the next
+    struct Glide {
+        float from = 0, to = 0, from_h = 0, to_h = 0;
+        double t0 = -1;
+        long key = -1;
+    };
+    Glide glide_tab_, glide_row_;
+    bool gliding_ = false;            // one of them is moving (this picture)
+    void glide(Glide& g, long key, int y, int h, int& gy, int& gh);
     // UPDATE AVAILABLE: the window over the main menu with the entries of
     // news.txt this version lacks. UPDATE NOW starts update.bat (it waits for the game to close,
     // updates, rebuilds and starts it again) and closes the game; LATER (Esc)
@@ -266,36 +267,35 @@ private:
     struct ValueArea { int left, middle; };   // option rows: value column (left < 0: none)
     std::vector<ValueArea> values_;
     bool wrap_ = false;
-    // Settings tabs (tab_of in frontend.cpp says where each option goes)
-    enum { DISPLAY_TAB, LIGHTING_TAB, AUDIO_TAB, CONTROLS_TAB, GAME_TAB };   // LIGHTING_TAB is shown as GRAPHICS
-    static constexpr int TAB_COUNT = 4;   // (GAME_TAB: not shown in Star Wars)
+    // The settings' sections (OPTION_TABS in frontend.cpp says where each option goes)
+    enum { EXPERIENCE_TAB, DISPLAY_TAB, GRAPHICS_TAB, AUDIO_TAB, CONTROLS_TAB };
+    static constexpr int TAB_COUNT = 5;
     static const wchar_t* const TAB_NAMES[TAB_COUNT];
-    static int tab_of(Id id);
-    struct OptionTab { Id id; int tab; };
+    struct OptionTab {
+        Id id;
+        int tab;
+        const wchar_t* group = nullptr;   // a heading over this row: the group it starts
+    };
     static const OptionTab OPTION_TABS[];   // frontend.cpp: where each option goes
+    static const wchar_t* group_of(Id id);   // the heading over that option's row, if it starts a group
     void set_tab(int t);
-    int tab_ = 0;   // open tab of the settings, or of the records
-    // The tab row of the screen on: settings tabs, or ACHIEVEMENTS / STATS
+    int tab_ = 0;   // open section of the settings, or of the records
+    // The sections of the page on: the settings', or ACHIEVEMENTS / STATS
     static constexpr int RECORD_TAB_COUNT = 2;
     static const wchar_t* const RECORD_TAB_NAMES[RECORD_TAB_COUNT];
     int tab_count() const { return screen_ == Screen::Records ? RECORD_TAB_COUNT : TAB_COUNT; }
-    const wchar_t* tab_name(int t) const { return screen_ == Screen::Records ? RECORD_TAB_NAMES[t] : TAB_NAMES[t]; }
-    // Records: the rows of the open tab and the first one shown
+    // Records: the rows of the open section (REC_ROW entries of items())
     struct RecordRow {
         std::wstring label, detail, value;
         bool lit = true;   // an achievement: unlocked
+        int group = 0;     // RECORD_GROUPS: UNLOCKED, LOCKED, TOTALS, BEST STAGES
     };
     std::vector<RecordRow> record_rows() const;
-    static constexpr int VISIBLE_RECORDS = 7;
-    int record_scroll_ = 0;
-    void scroll_records(int by);
-    void draw_records(int x0, int x1, int y0, int row_h);
-    // A settings tab shows this many options at most; the rest scroll
-    static constexpr int VISIBLE_OPTIONS = 6;
-    int scroll_ = 0;           // first option shown
-    RECT more_up_{}, more_down_{};   // clickable "more" arrows of a scrolled tab
-    std::vector<RECT> tab_rects_;   // a step past the end starts again (clicks on the label)
-    int mouse_x_ = -1, mouse_y_ = -1;
+    int scroll_ = 0;           // first row shown
+    bool options_scroll_ = false;   // the open section's rows do not all fit (the last draw)
+    RECT more_up_{}, more_down_{};   // clickable "more" arrows of a scrolled section
+    std::vector<RECT> tab_rects_;   // the sections in the column at the left (clicks)
+    int mouse_y_ = -1;   // the pointer, for the section under it
 
     std::vector<HANDLE> font_handles_;
     std::vector<std::vector<char>> font_data_;
@@ -303,21 +303,11 @@ private:
     std::map<std::wstring, Mask> masks_;
     std::map<std::pair<int, int>, std::pair<int, int>> caps_;   // cap_rows by (family, px)
     HDC dc_ = nullptr;
-    bool jurassic_ = false;   // third_party/fonts/Jurassic_Park.ttf loaded
 
     int w_ = 0, h_ = 0;
     float u_ = 1;   // pixels per unit of a 1920x1080 layout
     uint32_t* px_ = nullptr;
     std::vector<uint32_t> bg_;   // main menu backdrop for the current size
-    std::vector<uint32_t> bg_stone_;   // with a poster: its stone only, without the logo (options)
-    // Optional poster (third_party/menu/cover.png, not in the repository):
-    // portrait picture with the logo at the top and plain dark stone below.
-    // It becomes the backdrop and the title; its stone continues at the sides.
-    std::vector<uint32_t> poster_;
-    int poster_w_ = 0, poster_h_ = 0;
-    bool load_poster(const std::wstring& path);
+    std::vector<uint32_t> bg_blur_;   // the same blurred and darker: behind the settings page and the records
     static bool load_image(const std::wstring& path, std::vector<uint32_t>& px, int& w, int& h);
-    bool has_poster() const { return poster_w_ > 0; }
-    void poster_background(bool stone_only, std::vector<uint32_t>& dst);
-    void poster_layout(float& scale, float& y0) const;
 };

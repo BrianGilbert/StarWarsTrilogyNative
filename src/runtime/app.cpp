@@ -993,37 +993,17 @@ int main(int argc, char** argv) {
                     renderer.set_sun(g_opt.sun = s.sun);
                     renderer.set_shadows((g_opt.shadows = s.shadows) ? 1.0f : 0.0f);
                     renderer.set_ray_tracing(g_opt.ray_tracing = s.ray_tracing);
-                    renderer.set_light_shafts((g_opt.shafts = s.shafts) ? 1.0f : 0.0f);
-                    renderer.set_soft_particles(g_opt.soft = s.soft);
                     r3d_set_swt_explosions(g_opt.explosions = s.explosions);
                     renderer.set_hdr(g_opt.hdr = s.hdr);
-                    renderer.set_relief(g_opt.relief = s.relief);
                     renderer.set_sharpen((g_opt.sharpen = s.sharpen) ? 0.5f : 0.0f);
-                    if (g_opt.sky_procedural != s.sky) {
-                        g_opt.sky_procedural = s.sky;
-                        {
-                            std::lock_guard<std::mutex> lock(prep_mutex);   // not while composing
-                            sky.set_procedural(s.sky);
-                            builder.set_procedural_sky(s.sky);
-                        }
-                        renderer.set_night_sky(s.sky);
-                        shown = ~0ull;   // compose the 2D layer again even while the game stands still
-                    }
-                    if (g_opt.classic_text != !s.hd_text) {
-                        g_opt.classic_text = !s.hd_text;
-                        shown = ~0ull;   // compose the 2D layer again even while the game stands still
-                    }
-                    g_opt.show_crosshair = s.crosshair;
                     if (g_opt.interp != s.smooth) {
                         g_opt.interp = s.smooth;
                         renderer.set_interpolation(1.0f);   // the latest game frame as it is
                         renderer.set_back_shift(0.0f);
                     }
-                    g_opt.several_mice = s.second_mouse;
                     g_pointer_sight = s.pointer_sight;
                     g_duel_invert = s.duel_invert;
                     g_sight_scale = s.sight_size / 100.0f;
-                    if (!s.second_mouse) raw_mice::reset();
                     renderer.set_picture(s.saturation / 100.0f, s.gamma / 100.0f);
                     g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert};
                     s.save("save/settings.ini");

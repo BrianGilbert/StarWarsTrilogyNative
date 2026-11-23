@@ -292,6 +292,7 @@ FT_Library g_ft = nullptr;
 struct LoadedFont {
     FT_Face face;
     std::string family;   // letters and digits only, lower case
+    std::string full;     // with the style: "barlowcondensedsemibold" (one family in several files)
 };
 std::vector<LoadedFont> g_loaded_fonts;
 
@@ -338,19 +339,24 @@ HANDLE AddFontMemResourceEx(void* data, DWORD size, void*, DWORD* count) {
     if (!g_ft && FT_Init_FreeType(&g_ft) != 0) return nullptr;
     FT_Face face = nullptr;   // the caller keeps `data` until RemoveFontMemResourceEx, as with GDI
     if (FT_New_Memory_Face(g_ft, static_cast<const FT_Byte*>(data), FT_Long(size), 0, &face) != 0) return nullptr;
-    g_loaded_fonts.push_back({face, font_key(face->family_name ? face->family_name : "")});
+    std::string family = face->family_name ? face->family_name : "";
+    g_loaded_fonts.push_back({face, font_key(family), font_key(family + (face->style_name ? face->style_name : ""))});
     if (count) *count = 1;
     return face;
 }
 
 // Windows calls a face by more of its name ("Saira ExtraCondensed ExCond" for
 // the family "Saira ExtraCondensed"), so the longest family it starts with
-// wins; none of them: the first one loaded
+// wins; a family with its style ("Barlow Condensed SemiBold") that one file
+// exactly; none of them: the first one loaded
 HFONT CreateFontW(int height, int, int, int, int, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, const wchar_t* face) {
     std::string want = font_key(narrow(face));
     const LoadedFont* best = nullptr;
     for (const LoadedFont& f : g_loaded_fonts)
-        if (want.rfind(f.family, 0) == 0 && (!best || f.family.size() > best->family.size())) best = &f;
+        if (want == f.full && !best) best = &f;
+    if (!best)
+        for (const LoadedFont& f : g_loaded_fonts)
+            if (want.rfind(f.family, 0) == 0 && (!best || f.family.size() > best->family.size())) best = &f;
     if (!best && !g_loaded_fonts.empty()) best = &g_loaded_fonts.front();
     if (!best) return nullptr;
     auto* m = new LinuxFont;

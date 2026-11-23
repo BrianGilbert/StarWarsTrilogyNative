@@ -31,7 +31,7 @@
 - **Sharp and smooth**: MSAA or NVIDIA DLAA, HD text, and the 3D drawn between the game's frames at 120 / 144 Hz and above.
 - **Arcade sound**, with the Digital Sound Board's music and voices, and surround and headphone modes.
 - **Mouse, gamepad (gyro too), light gun or flight stick**, with aim assist and force feedback as rumble.
-- **Quality presets** from laptops to RTX cards, and **achievements and stats** in Records.
+- **Settings for every effect**, from laptops to RTX cards, and **achievements and stats** in Records.
   The achievements are also written to `achievements/achievements.csv` for [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) (Editor, Spreadsheet Import).
 
 <table>
@@ -47,7 +47,7 @@
 
 ## Coming soon
 
-New game modes made for this port, already waiting under **Play > Extra modes**:
+New game modes made for this port, already waiting under **Play**:
 
 - **Dogfight**: your X-wing against squadrons of TIE fighters, with random encounters and
   objectives, so no two flights are the same.
