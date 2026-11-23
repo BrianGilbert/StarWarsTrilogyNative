@@ -217,9 +217,17 @@ int main(int argc, char** argv) {
     // The menus (and the settings they save) are left out of test runs, so
     // those always start from the same defaults
     g_opt.menu = !options_disable_menu(argc, argv);
-    FrontendSettings ini;
+    FrontendSettings ini, other_ini;   // the experience to run, the other one (EXPERIENCE)
     if (g_opt.menu) {   // save/settings.ini, written by the options menu; command-line options win
         ini.load("save/settings.ini");
+        // ARCADE ORIGINAL's own settings: its section, over the arcade's defaults
+        FrontendSettings arcade_ini = ini.arcade_defaults();
+        arcade_ini.load("save/settings.ini", "arcade");
+        if (ini.experience == 1) {
+            other_ini = ini;
+            ini = arcade_ini;
+            printf("[experience] ARCADE ORIGINAL\n");
+        } else other_ini = arcade_ini;
         options_from_settings(g_opt, ini);
         g_pointer_sight = ini.pointer_sight;
         g_duel_invert = ini.duel_invert;
@@ -230,6 +238,7 @@ int main(int argc, char** argv) {
     int exit_code = 0;
     const bool menu_allowed = g_opt.menu;   // no test run (--no-menu itself is read just below)
     if (!parse_options(g_opt, argc, argv, nullptr, exit_code)) return exit_code;
+    if (!g_opt.menu) g_opt.arcade = false;   // (--no-menu: the game as a test run, PC EDITION's settings)
     // What the options set outside the struct: emulation globals and the gun
     g_data_dir = g_opt.data_dir;
     g_frame_limit = g_opt.frame_limit;
@@ -353,8 +362,9 @@ int main(int argc, char** argv) {
         // Records and achievements: real games only, never the scripted or cheated test runs
         if (g_opt.menu && g_auto.events.empty()) stats_init();
         g_audio.start();
-        g_hold = g_opt.menu || intro;   // the main menu (or the intro video) comes first
-        g_skip_attract = g_opt.menu && g_auto.events.empty();   // the menu instead of the attract (runtime.cpp)
+        // the main menu (or the intro video) comes first; ARCADE ORIGINAL: the game as it is, from its SEGA logo
+        g_hold = (g_opt.menu && !g_opt.arcade) || intro;
+        g_skip_attract = g_opt.menu && g_auto.events.empty() && !g_opt.arcade;   // the menu instead of the attract (runtime.cpp)
         g_boot_skip = g_fast_idle = !g_opt.show_boot;
         g_sound.set_dsp_enabled(!g_boot_skip);
         g_sound.set_muted(g_boot_skip);
@@ -564,6 +574,8 @@ int main(int argc, char** argv) {
         FrontendSettings& s = frontend.settings;
         s = ini;   // all of save/settings.ini (the controls, the paths, the update check)...
         settings_from_options(s, g_opt);   // ...with the command-line options over it
+        frontend.other = other_ini;
+        frontend.arcade = g_opt.arcade;
         frontend.aa_at_launch = s.aa;
         frontend.rt_available = renderer.ray_tracing_available();
 #ifdef _WIN32   // DLAA and DLSS in the menu only on a card that runs them (an RTX)
@@ -591,12 +603,14 @@ int main(int argc, char** argv) {
             s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
         }
         // the logo first (not when a debugging aid drives the menu)
-        if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT") || getenv("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
+        // ARCADE ORIGINAL: no logo, no main menu: the game from its SEGA logo
+        if (g_opt.arcade) frontend.open(Frontend::Screen::None);
+        else if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT") || getenv("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
         else {
             frontend.open_splash();
             frontend.check_for_news();   // news.txt on GitHub while the logo plays
         }
-        g_menu_open = true;
+        g_menu_open = !g_opt.arcade;
         presenter.input_hook = [&](UINT msg, WPARAM wp, LPARAM lp) -> bool {
             int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
             if (!frontend.active()) {   // in the game: Esc pauses
@@ -635,6 +649,20 @@ int main(int argc, char** argv) {
             return false;
         };
     }
+    // save/settings.ini: PC EDITION's settings at the top, ARCADE ORIGINAL's in [arcade]
+    // (the running experience's from the menu, the other's as they were read)
+    auto save_settings = [&] {
+        const FrontendSettings& s = frontend.settings;
+        if (!g_opt.arcade) {
+            FrontendSettings::save("save/settings.ini", s, frontend.other);
+            return;
+        }
+        FrontendSettings pc = frontend.other;   // with the keys of the whole game as they are now
+        pc.experience = s.experience;
+        pc.check_updates = s.check_updates;
+        pc.news_seen = s.news_seen;
+        FrontendSettings::save("save/settings.ini", pc, s);
+    };
     auto close_menu = [&] {
         frontend.open(Frontend::Screen::None);
         ui.hide();
@@ -644,7 +672,7 @@ int main(int argc, char** argv) {
 
     // PLAY: 1 = join once booted. Star Wars Trilogy goes to its mission select
     // already behind the menu, from the start, so PLAY shows it at once
-    int arcade_join = kAnalogJoystick && g_opt.menu ? 1 : 0;
+    int arcade_join = kAnalogJoystick && g_opt.menu && !g_opt.arcade ? 1 : 0;
     bool arcade_entered = false;
     bool play_waits = false;   // PLAY pressed while the game still gets to the mission select
     bool restart = false;      // RESTART NOW: the game starts again once this one has closed
@@ -989,12 +1017,12 @@ int main(int argc, char** argv) {
                 g_wide_view = compute_layout(float(wrc.right), float(wrc.bottom), g_opt.max_aspect).view_w / SCREEN_W;
         }
         if (toast_shown) {
-            for (int i : stats_take_new_achievements())
-                toast.push(achievement_table()[size_t(i)].name, achievement_table()[size_t(i)].text);
+            for (int i : stats_take_new_achievements())   // (ARCADE ORIGINAL: counted, not shown)
+                if (!g_opt.arcade) toast.push(achievement_table()[size_t(i)].name, achievement_table()[size_t(i)].text);
             // The author's credit over the attract (seen with the menu off, --no-menu)
             toast.set_credit(L"PC port by snicolast",
                              L"github.com/snicolast/StarWarsTrilogyNative",
-                             g_in_attract && !g_menu_open && !g_boot_skip && !g_arcade_entry);
+                             g_in_attract && !g_menu_open && !g_boot_skip && !g_arcade_entry && !g_opt.arcade);
             RECT rc;
             GetClientRect(presenter.hwnd(), &rc);
             if (toast.draw(rc.right, rc.bottom, qpc_seconds(), toast_pixels))
@@ -1043,14 +1071,14 @@ int main(int argc, char** argv) {
                     break;
                 case Frontend::Action::Quit: presenter.close(); break;
                 case Frontend::Action::Restart:   // RESTART NOW: saved, closed as on QUIT, started again (end of main)
-                    s.save("save/settings.ini");
+                    save_settings();
                     restart = true;
                     presenter.close();
                     break;
                 case Frontend::Action::DisplayChanged:   // MODE, RESOLUTION: at once
                     presenter.set_mode(s.display_mode, s.res_w, s.res_h);
                     s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
-                    s.save("save/settings.ini");
+                    save_settings();
                     frontend.invalidate();
                     break;
                 case Frontend::Action::SettingsChanged:
@@ -1084,14 +1112,14 @@ int main(int argc, char** argv) {
                     presenter.set_vsync(s.vsync);
                     g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert,
                                       s.trigger_rumble};
-                    s.save("save/settings.ini");
+                    save_settings();
                     break;
                 default: break;
                 }
             }
             if (frontend.settings.display_mode != presenter.mode()) {   // F11 / Alt+Enter
                 frontend.settings.display_mode = presenter.mode();
-                frontend.settings.save("save/settings.ini");
+                save_settings();
                 frontend.invalidate();
             }
             {   // the window's inside and the desktop, for RESOLUTION; the refresh rate, for MAX FPS
