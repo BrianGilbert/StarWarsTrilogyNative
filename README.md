@@ -18,7 +18,7 @@
 
 ## What you get
 
-- **True widescreen**, not stretched: 16:9, 21:9, 32:9 or 48:9 for three monitors.
+- **True widescreen**, not stretched: 16:9, 21:9, 32:9, 48:9 for three monitors, or AUTO to fill any window.
 - **Ray-traced sun shadows** and ambient occlusion, haze, bloom, light shafts and HDR lighting.
 - **New looks, made for this port**:
   - New explosions in Yavin: billowing fireballs, sparks, burning debris and TIE fighters breaking
@@ -99,7 +99,8 @@ Your ROM, settings and records are kept; files you edited are backed up to `out\
 | Coin + start | 5, then 1 | BACK, then START |
 | Pause | Esc | START |
 
-F11 or Alt+Enter toggles fullscreen. Everything else is in **Options**.
+F11 or Alt+Enter switches between the window and full screen (**Options > Display > Mode**: window, borderless or
+exclusive fullscreen at the **Resolution** you pick). Everything else is in **Options**.
 
 - **Mouse / light gun**: the sight goes where you point (Sinden, Gun4IR and other guns seen as a
   mouse work as is). OPTIONS > CONTROLS can make the mouse move the flight lever instead.

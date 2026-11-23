@@ -49,7 +49,6 @@ public:
     bool descriptor_indexing() const { return descriptor_indexing_; }
     HWND hwnd() const { return hwnd_; }
     void toggle_fullscreen();   // F11 / Alt+Enter: the window, or the last full-screen mode
-    bool fullscreen() const { return fullscreen_; }
     // MODE: 0 a window (w x h inside, 0: as it is), 1 borderless at the
     // desktop's resolution, 2 exclusive full screen: the monitor set to w x h
     // (0: the desktop's) while the game runs; if the monitor refuses it,
