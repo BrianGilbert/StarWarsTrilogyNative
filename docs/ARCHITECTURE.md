@@ -61,7 +61,6 @@ so its Windows paths stay as they are:
 | GDI text | Core Text (`win32_mac.mm`) |
 | WIC | ImageIO (`image_io_mac.mm`) |
 | Media Foundation, MCI, PlaySound | AVFoundation (`splash_video_mac.mm`, `menu_music_mac.mm`, `win32_mac.mm`) |
-| WinHTTP | NSURLSession (`win32_mac.mm`) |
 | NGX (DLAA) | none (`dlss_mac.cpp`) |
 
 The floating point of the game must stay as the Windows build has it: `-ffp-contract=off` keeps `a*b+c` as two

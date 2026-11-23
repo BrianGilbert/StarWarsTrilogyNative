@@ -572,7 +572,7 @@ int main(int argc, char** argv) {
     }
     if (g_opt.menu) {
         FrontendSettings& s = frontend.settings;
-        s = ini;   // all of save/settings.ini (the controls, the paths, the update check)...
+        s = ini;   // all of save/settings.ini (the controls, the paths...)...
         settings_from_options(s, g_opt);   // ...with the command-line options over it
         frontend.other = other_ini;
         frontend.arcade = g_opt.arcade;
@@ -606,10 +606,7 @@ int main(int argc, char** argv) {
         // ARCADE ORIGINAL: no logo, no main menu: the game from its SEGA logo
         if (g_opt.arcade) frontend.open(Frontend::Screen::None);
         else if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT") || getenv("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
-        else {
-            frontend.open_splash();
-            frontend.check_for_news();   // news.txt on GitHub while the logo plays
-        }
+        else frontend.open_splash();
         g_menu_open = !g_opt.arcade;
         presenter.input_hook = [&](UINT msg, WPARAM wp, LPARAM lp) -> bool {
             int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
@@ -657,10 +654,8 @@ int main(int argc, char** argv) {
             FrontendSettings::save("save/settings.ini", s, frontend.other);
             return;
         }
-        FrontendSettings pc = frontend.other;   // with the keys of the whole game as they are now
+        FrontendSettings pc = frontend.other;   // with EXPERIENCE as it is now
         pc.experience = s.experience;
-        pc.check_updates = s.check_updates;
-        pc.news_seen = s.news_seen;
         FrontendSettings::save("save/settings.ini", pc, s);
     };
     auto close_menu = [&] {

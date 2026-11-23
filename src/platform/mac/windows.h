@@ -97,7 +97,6 @@ struct WIN32_FIND_DATAA { char cFileName[MAX_PATH]; };
 
 #define MB_OK 0u
 #define MB_ICONERROR 0x10u
-#define SW_SHOWNORMAL 1
 
 // ---- Clocks, threads, the process ----
 BOOL QueryPerformanceCounter(LARGE_INTEGER* out);
@@ -137,8 +136,6 @@ inline short GetKeyState(int vk) { return GetAsyncKeyState(vk); }
 BOOL SetWindowTextA(HWND hwnd, const char* text);
 int MessageBoxA(HWND hwnd, const char* text, const char* title, UINT type);
 inline BOOL PtInRect(const RECT* r, POINT p) { return p.x >= r->left && p.x < r->right && p.y >= r->top && p.y < r->bottom; }
-// Web addresses go to the default browser; anything else (.exe, .bat) fails with 0
-INT_PTR ShellExecuteW(HWND hwnd, const wchar_t* verb, const wchar_t* file, const wchar_t* args, const wchar_t* dir, int show);
 
 // The compositor's vblank: not known here, DisplayClock (app.cpp) keeps its own
 struct DWM_TIMING_INFO {
