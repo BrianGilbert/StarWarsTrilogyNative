@@ -2222,6 +2222,13 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
     f.lay = compute_layout(float(extent.width), float(extent.height), max_aspect_);
     f.out_w = std::max(1u, uint32_t(f.lay.view_w * f.lay.scale * supersample_));
     f.out_h = std::max(1u, uint32_t(SCREEN_H * f.lay.scale * supersample_));
+    {   // (once per size: the 3D's own resolution, RENDER SCALE / --scale)
+        static uint32_t logged_w = 0, logged_h = 0;
+        if (f.out_w != logged_w || f.out_h != logged_h) {
+            logged_w = f.out_w, logged_h = f.out_h;
+            printf("[video] 3D drawn at %ux%u (scale %.2f)\n", f.out_w, f.out_h, supersample_);
+        }
+    }
     ensure_targets(f.out_w, f.out_h);
     static const bool gpu_time = getenv("SWT_GPUTIME") || getenv("LW_GPUTIME");
     if (gpu_time && !gpu_times_) {

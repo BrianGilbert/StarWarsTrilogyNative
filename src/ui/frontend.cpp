@@ -161,7 +161,7 @@ void FrontendSettings::load(const char* path) {
         else if (k == "rear_boost") rear_boost = std::clamp(atoi(value) / 3 * 3, 0, 12);
         else if (k == "sample_interpolation") cubic_samples = v != "linear";
         else if (k == "aa") aa = v == "dlaa" || v == "msaa8" ? 1 : (v == "none" || v == "off") ? 2 : 0;
-        else if (k == "supersample") supersample = atoi(value) >= 200 ? 200 : atoi(value) >= 150 ? 150 : 100;
+        else if (k == "render_scale" || k == "supersample") render_scale = std::clamp(atoi(value), 50, 200);   // (supersample: before 50-200 %)
         else if (k == "haze") haze = on;
         else if (k == "bloom") bloom = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : on ? 2 : 0;
         else if (k == "ao") ao = on;
@@ -221,9 +221,7 @@ void FrontendSettings::save(const char* path) const {
     fprintf(f, "duel_invert = %s\n", INVERT[duel_invert]);
     fprintf(f, "aspect = %s\n", ASPECT_WORDS[aspect]);
     fprintf(f, "explosions = %s\n", explosions ? "enhanced" : "arcade");
-#ifndef _WIN32
-    fprintf(f, "supersample = %d\n", supersample);
-#endif
+    fprintf(f, "render_scale = %d\n", render_scale);
     fprintf(f, "check_updates = %d\nnews_seen = %d\n", check_updates, news_seen);
     fclose(f);
 }
@@ -528,10 +526,8 @@ std::vector<Frontend::Item> Frontend::items() const {
                 {OPT_SAMPLES, L"SAMPLE QUALITY", settings.cubic_samples ? L"SMOOTH" : L"ORIGINAL",
                  L"Smooth interpolation of the instrument and voice samples, or the original chip's"},
                 {OPT_AA, L"ANTI-ALIASING", AA[settings.aa], aa_hint},
-#ifndef _WIN32   // macOS and Linux (Windows has DLAA)
-                {OPT_SCALE, L"SUPERSAMPLING", settings.supersample == 100 ? L"OFF" : settings.supersample == 150 ? L"1.5X" : L"2X",
-                 L"The 3D drawn larger and scaled down: smoother edges and textures.  Applies on the next start"},
-#endif
+                {OPT_SCALE, L"RENDER SCALE", std::to_wstring(settings.render_scale) + L"%",
+                 L"The 3D drawn at this share of the picture's size: above 100% sharper and slower, below faster and softer"},
                 {OPT_HAZE, L"DISTANCE HAZE", on_off(settings.haze),
                  L"Far scenery on Hoth and Endor fades into the sky instead of appearing suddenly"},
                 {OPT_BLOOM, L"BLOOM", BLOOM_LEVELS[settings.bloom], L"Soft glow around lasers, explosions, engines and lights"},
@@ -718,11 +714,15 @@ void Frontend::activate(const Item& it, int dir) {
     case OPT_REAR: settings.rear_boost = (settings.rear_boost + 3 * dir + 15) % 15; push(Action::SettingsChanged); break;
     case OPT_SAMPLES: settings.cubic_samples = !settings.cubic_samples; push(Action::SettingsChanged); break;
     case OPT_AA: settings.aa = (settings.aa + dir + 3) % 3; push(Action::SettingsChanged); break;
-    case OPT_SCALE: settings.supersample = settings.supersample == 100 ? (dir > 0 ? 150 : 200)
-                                         : settings.supersample == 150 ? (dir > 0 ? 200 : 100)
-                                                                       : (dir > 0 ? 100 : 150);
+    case OPT_SCALE: {
+        static const int STEPS[] = {50, 67, 75, 85, 100, 125, 150, 175, 200};
+        int n = int(std::size(STEPS)), i = 4;
+        for (int k = 0; k < n; k++)
+            if (STEPS[k] <= settings.render_scale) i = k;
+        settings.render_scale = STEPS[(i + dir + n) % n];
         push(Action::SettingsChanged);
         break;
+    }
     case OPT_HAZE: settings.haze = !settings.haze; push(Action::SettingsChanged); break;
     case OPT_BLOOM: settings.bloom = (settings.bloom + dir + 4) % 4; push(Action::SettingsChanged); break;
     case OPT_AO: settings.ao = !settings.ao; push(Action::SettingsChanged); break;

@@ -1040,6 +1040,7 @@ int main(int argc, char** argv) {
                     r3d_set_swt_explosions(g_opt.explosions = s.explosions);
                     renderer.set_hdr(g_opt.hdr = s.hdr);
                     renderer.set_sharpen((g_opt.sharpen = s.sharpen) ? 0.5f : 0.0f);
+                    renderer.set_supersample(g_opt.supersample = s.render_scale / 100.0f);
                     if (g_opt.interp != s.smooth) {
                         g_opt.interp = s.smooth;
                         renderer.set_interpolation(1.0f);   // the latest game frame as it is
