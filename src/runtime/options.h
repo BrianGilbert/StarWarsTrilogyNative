@@ -16,6 +16,7 @@ struct Options {
     int frame_limit = INT32_MAX;     // --frames; with --headless, 600 by default
     bool headless = false;           // --headless: no window, full speed, report at the end
     bool menu = true;                // the main menu and save/settings.ini; off in test runs
+    bool arcade = false;             // EXPERIENCE ARCADE ORIGINAL (settings.ini): the cabinet as it was, no main menu
     bool show_boot = false;          // --boot: the power-on screens before the SEGA logo
     bool trigger_rumble = true;      // --no-trigger-rumble: Xbox pads through XInput (no motors in the triggers)
     // Picture

@@ -31,6 +31,8 @@
 - **Sharp and smooth**: MSAA, FXAA or NVIDIA DLAA and DLSS (with dynamic resolution), HD text, and the 3D drawn between the game's frames at 120 / 144 Hz and above.
 - **Arcade sound**, with the Digital Sound Board's music and voices, and surround and headphone modes.
 - **Mouse, gamepad (gyro too), light gun or flight stick**, with aim assist and force feedback as rumble.
+- **ARCADE ORIGINAL** (OPTIONS > EXPERIENCE): the cabinet as it was, straight to the SEGA logo and the
+  attract, coin and START to play, with the original look and sound (in 4:3 or widescreen).
 - **Settings for every effect**, from laptops to RTX cards, and **achievements and stats** in Records.
   The achievements are also written to `achievements/achievements.csv` for [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) (Editor, Spreadsheet Import).
 

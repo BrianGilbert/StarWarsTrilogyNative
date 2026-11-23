@@ -70,10 +70,25 @@ struct FrontendSettings {
     bool pointer_sight = true; // the sight goes where the mouse / light gun points (false: the mouse is the lever)
     bool check_updates = true;     // at launch, news.txt on GitHub: a window with what is new and UPDATE NOW
     int news_seen = 0;             // the newest news.txt entry the player closed with LATER
+    // EXPERIENCE (the file's first section only): 0 PC EDITION, 1 ARCADE ORIGINAL. Each
+    // experience keeps its own settings: PC EDITION's at the top of the file, ARCADE
+    // ORIGINAL's in its [arcade] section
+    int experience = 0;
 
-    // save/settings.ini; missing keys keep their current value
-    void load(const char* path);
-    void save(const char* path) const;
+    // save/settings.ini; missing keys keep their current value. section: "" the
+    // file's first one (PC EDITION and the keys of the whole game), "arcade" ARCADE ORIGINAL's
+    void load(const char* path, const char* section = "");
+    // One "key = value" line per setting (section: without the keys of the whole game)
+    std::string text(bool section = false) const;
+    // save/settings.ini: PC EDITION's settings (and the keys of the whole game) at the top, ARCADE ORIGINAL's in [arcade]
+    static void save(const char* path, const FrontendSettings& pc, const FrontendSettings& arcade);
+    // ARCADE ORIGINAL's settings before it has a section of its own: these (the
+    // screen, the speakers and the controls) with the arcade's own look
+    FrontendSettings arcade_defaults() const;
+    // Those base values of ARCADE ORIGINAL (its [arcade] section's first time, and RESTORE ORIGINAL):
+    // no new effects, no anti-aliasing, the original colours and sound, ASPECT 4:3. The
+    // screen (MODE, RESOLUTION, RENDER SCALE, VSYNC, MAX FPS...), the speakers and the controls stay the player's
+    void arcade_base();
 };
 
 class Frontend {
@@ -106,7 +121,11 @@ public:
     // Actions picked since the last call, oldest first
     std::vector<Action> take_actions();
 
-    FrontendSettings settings;
+    FrontendSettings settings;   // the experience running (EXPERIENCE: settings.experience, the choice for the next start)
+    // The other experience's settings (PC EDITION's while ARCADE ORIGINAL runs, and
+    // the other way round): EXPERIENCE's ASPECT and saving both (app.cpp)
+    FrontendSettings other;
+    bool arcade = false;    // ARCADE ORIGINAL is running: no main menu, a pause of its own
     int aa_at_launch = 0;   // anti-aliasing the renderer was started with
     bool rt_available = false;   // the GPU can trace rays (RAY TRACING option)
     bool dlss_available = true;  // the GPU can run DLAA and DLSS (an NVIDIA RTX): otherwise ANTI-ALIASING offers FXAA instead
@@ -139,10 +158,12 @@ private:
     enum Id {
         PLAY, OPTIONS, QUIT, ARCADE, BACK, RESUME, SETTINGS, QUIT_TO_MENU, TABS,
         RECORDS, REC_ROW, DEBUG, DEBUG_STAGE, DEBUG_PHASE, DOGFIGHT,
+        PAUSE_QUIT, PAUSE_RESTORE, PC_EDITION,   // ARCADE ORIGINAL's pause: QUIT GAME, RESTORE ORIGINAL, BACK TO PC EDITION
         // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
         OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
         OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
         OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION, OPT_VSYNC, OPT_MAXFPS, OPT_BGFPS, OPT_TRIGGERS,
+        OPT_EXPERIENCE, OPT_ARCADE_ASPECT,
     };
     struct Item {
         Id id;
@@ -235,6 +256,15 @@ private:
     std::wstring restart_list() const;   // what waits for a restart, "" nothing
     void restart_choose(int button);
     void draw_restart();
+    // BACK TO PC EDITION (ARCADE ORIGINAL's pause): the same window, with this
+    // note instead of the list (saved already; LATER: the pause again)
+    std::wstring restart_note_;
+    // RESTORE ORIGINAL (ARCADE ORIGINAL's pause): the same window asks RESTORE / CANCEL
+    // first; RESTORE puts arcade_base() back, then RESTART THE GAME? if one of them needs it
+    bool restore_ask_ = false;
+    // ARCADE ORIGINAL's settings: the running ones while it runs, else the other experience's
+    FrontendSettings& arcade_side() { return arcade ? settings : other; }
+    const FrontendSettings& arcade_side() const { return arcade ? settings : other; }
     // RESOLUTION's list: Enter or a click opens it over the description panel
     bool drop_open_ = false;
     int drop_sel_ = 0, drop_top_ = 0;     // the highlighted one, the first shown (resolutions, largest first)
