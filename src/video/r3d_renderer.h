@@ -6,6 +6,7 @@
 // depth and per-pixel motion vectors instead), then a full-screen pass composes back 2D layers, the 3D image and front 2D layers
 // into the swapchain image with letterboxing.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -127,6 +128,8 @@ public:
     void set_relief_range(float units) { relief_range_ = units; }   // how far the surface detail reaches (world units)
     // Contrast adaptive sharpening of the 3D image: 0 = off, 1 = strongest
     void set_sharpen(float amount) { sharpen_ = amount; }
+    // RENDER SCALE: the 3D drawn at this factor of the picture's size (0.5..4; the targets are made again)
+    void set_supersample(float factor) { supersample_ = std::clamp(factor, 0.5f, 4.0f); }
     // A procedural night sky behind a world the game leaves on a black
     // backdrop in the dark (not in the original; part of SKY: PROCEDURAL)
     void set_night_sky(bool on) { night_sky_ = on; }

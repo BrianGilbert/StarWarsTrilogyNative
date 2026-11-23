@@ -58,6 +58,8 @@ const std::vector<Entry>& table() {
         text("--rom", "ZIP", &Options::rom_zip, "path to swtrilgy.zip (or SWT_ROM_ZIP; by default next to the exe)"),
         text("--data", "DIR", &Options::data_dir, "folder with the ROM already extracted by tools/romtool.py (data)"),
         flag("--boot", &Options::show_boot, "show the power-on screens before the SEGA logo"),
+        off("--no-trigger-rumble", &Options::trigger_rumble,
+            "no rumble in the triggers of Xbox One / Series pads (they are then read through XInput)"),
         section("Picture"),
         real("--scale", &Options::supersample, "internal 3D resolution multiplied by F (1)"),
         num("--msaa", &Options::msaa, "samples per pixel (4; 1 = no MSAA)"),
@@ -80,10 +82,12 @@ const std::vector<Entry>& table() {
                                   : (v[0] == 'l' || v[0] == 'L') ? 3 : 0;
                }),
         num("--aniso", &Options::aniso, "anisotropic filtering (8; 0 = no mipmaps, original look)"),
-        custom("--aspect", "A:B", "widest 3D view: 16:9 (default), 21:9, 32:9, 48:9, 4:3 or a number", false,
+        custom("--aspect", "A:B", "widest 3D view: 16:9 (default), 21:9, 32:9, 48:9, 4:3, auto (the window's shape) or a number", false,
                [](Options& o, const char* v) {
                    const char* colon = strchr(v, ':');
-                   o.max_aspect = colon ? float(atof(v) / atof(colon + 1)) : float(atof(v));
+                   o.max_aspect = strcmp(v, "auto") == 0 ? 6.0f
+                                  : colon            ? float(atof(v) / atof(colon + 1))
+                                                     : float(atof(v));
                }),
         real("--light-gain", &Options::light_gain, "multiply the sunlight and the ambient light (1)"),
         strength("--bloom", &Options::bloom, "glow around bright things, strength F (1)"),

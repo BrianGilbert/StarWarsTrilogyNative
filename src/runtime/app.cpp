@@ -54,6 +54,8 @@
 #include "../video/ui_overlay.h"
 #include "../video/vk_presenter.h"
 #ifndef _WIN32
+#include <unistd.h>   // execv (RESTART NOW)
+
 #include "../platform/mac/platform_mac.h"
 #endif
 #include "app_internal.h"
@@ -222,7 +224,8 @@ int main(int argc, char** argv) {
         g_pointer_sight = ini.pointer_sight;
         g_duel_invert = ini.duel_invert;
         g_sight_scale = ini.sight_size / 100.0f;
-        g_pad_settings = {ini.pad_speed, ini.gyro, ini.gyro_speed, ini.vibration, ini.aim_assist, ini.pad_lever, ini.pad_invert};
+        g_pad_settings = {ini.pad_speed, ini.gyro, ini.gyro_speed, ini.vibration, ini.aim_assist, ini.pad_lever, ini.pad_invert,
+                          ini.trigger_rumble};
     }
     int exit_code = 0;
     const bool menu_allowed = g_opt.menu;   // no test run (--no-menu itself is read just below)
@@ -300,9 +303,9 @@ int main(int argc, char** argv) {
     // Window: the game runs on its own thread at real speed; this thread draws
     // the latest image at the monitor's refresh rate (vsync)
     VkPresenter presenter;
-    // The window as wide as the 3D view, but within the screen (32:9 and
-    // 48:9 are for fullscreen on very wide monitors)
-    int window_w = int(SCREEN_H * 2 * std::max(g_opt.max_aspect, 4.0f / 3.0f));
+    // The window as wide as the 3D view, but within the screen and no wider
+    // than 21:9 (32:9, 48:9 and AUTO are for full screen on very wide monitors)
+    int window_w = int(SCREEN_H * 2 * std::clamp(g_opt.max_aspect, 4.0f / 3.0f, 2.4f));
     if (RECT work; SystemParametersInfoA(SPI_GETWORKAREA, 0, &work, 0))
         window_w = std::max(SCREEN_W * 2, std::min(window_w, int(work.right - work.left) - 64));
     if (!presenter.init("Star Wars Trilogy Native by snicolast", window_w, SCREEN_H * 2, g_opt.dlaa)) {
@@ -312,6 +315,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     printf("GPU: %s\n", presenter.device_name().c_str());
+    g_pads.trigger_rumble = g_opt.trigger_rumble;
     g_pads.init();
     timeBeginPeriod(1);
     QueryPerformanceFrequency(&g_qpf);
@@ -555,9 +559,26 @@ int main(int argc, char** argv) {
         settings_from_options(s, g_opt);   // ...with the command-line options over it
         frontend.aa_at_launch = s.aa;
         frontend.rt_available = renderer.ray_tracing_available();
-        if (s.fullscreen && !presenter.fullscreen()) presenter.toggle_fullscreen();
+        frontend.resolutions = presenter.display_modes();
+        if (s.res_w > 0 && !frontend.resolutions.empty()) {   // a size that is not one of the monitor's modes: the nearest
+            auto best = frontend.resolutions[0];
+            for (const auto& m : frontend.resolutions)
+                if (std::abs(m.first - s.res_w) + std::abs(m.second - s.res_h) <
+                    std::abs(best.first - s.res_w) + std::abs(best.second - s.res_h))
+                    best = m;
+            if (best.first != s.res_w || best.second != s.res_h) {
+                printf("[display] resolution %dx%d is not a mode of the monitor: %dx%d\n", s.res_w, s.res_h, best.first, best.second);
+                s.res_w = best.first, s.res_h = best.second;
+            }
+        }
+        printf("[display] %zu resolutions\n", frontend.resolutions.size());
+        presenter.set_vsync(s.vsync);
+        if (s.display_mode != 0 || (s.res_w > 0 && s.res_h > 0)) {
+            presenter.set_mode(s.display_mode, s.res_w, s.res_h);
+            s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
+        }
         // the logo first (not when a debugging aid drives the menu)
-        if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT")) frontend.open(Frontend::Screen::Main);
+        if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT") || getenv("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
         else {
             frontend.open_splash();
             frontend.check_for_news();   // news.txt on GitHub while the logo plays
@@ -613,6 +634,7 @@ int main(int argc, char** argv) {
     int arcade_join = kAnalogJoystick && g_opt.menu ? 1 : 0;
     bool arcade_entered = false;
     bool play_waits = false;   // PLAY pressed while the game still gets to the mission select
+    bool restart = false;      // RESTART NOW: the game starts again once this one has closed
 
     // Achievement notices, over the game and under the menus
     AchievementToast toast;
@@ -874,6 +896,31 @@ int main(int argc, char** argv) {
     int queue_extra = 0;
     double went_out = 0, last_miss = -100;
     for (;;) {
+        {   // MAX FPS (with VSYNC in whole refreshes), never over the monitor's refresh rate
+            // unless UNLIMITED without VSYNC (even when the driver has turned vsync off),
+            // BACKGROUND FPS: 30 without the focus. Sleeps to the millisecond, then waits the rest
+            static double due = 0;
+            const FrontendSettings& fs = frontend.settings;
+            double period = std::clamp(display_clock.period, 1.0 / 500, 1.0 / 20);
+            bool vsync = fs.vsync != 0 || !g_opt.menu;   // (ADAPTIVE too)
+            int max_fps = g_opt.menu ? fs.max_fps : 0;
+            double step = period;   // MONITOR, and MOTION ORIGINAL
+            if (g_opt.interp && max_fps > 0)
+                step = vsync ? period * std::max(1.0, std::round(1.0 / max_fps / period)) : std::max(1.0 / max_fps, 1.0 / 1000);
+            else if (g_opt.interp && max_fps < 0 && !vsync)
+                step = 0;   // UNLIMITED, chosen by the player
+            if (fs.background_fps && g_opt.menu && GetForegroundWindow() != presenter.hwnd()) step = std::max(step, 1.0 / 30);
+            // (dynamic resolution keeps the graphics card's time within that;
+            // UNLIMITED: none to keep to, always the full size)
+            renderer.set_gpu_budget(float(step * 1000.0));
+            double now = qpc_seconds();
+            if (step > 0 && due > 0 && due > now) {
+                if (due - now > 0.002) Sleep(DWORD((due - now) * 1000) - 1);
+                if (!vsync) while (qpc_seconds() < due) std::this_thread::yield();   // (without vsync nothing else paces it)
+            }
+            now = qpc_seconds();
+            due = step <= 0 ? 0 : due > 0 && now - due < step ? std::max(due + step, now + 0.25 * step) : now + step;
+        }
         {   // before the inputs are read
             int depth = queue_depth ? queue_depth + queue_extra : 0;
             double out = presenter.limit_queue(depth, 50'000'000);
@@ -982,9 +1029,19 @@ int main(int argc, char** argv) {
                     frontend.open(Frontend::Screen::Main);
                     break;
                 case Frontend::Action::Quit: presenter.close(); break;
-                case Frontend::Action::ToggleFullscreen: presenter.toggle_fullscreen(); break;
+                case Frontend::Action::Restart:   // RESTART NOW: saved, closed as on QUIT, started again (end of main)
+                    s.save("save/settings.ini");
+                    restart = true;
+                    presenter.close();
+                    break;
+                case Frontend::Action::DisplayChanged:   // MODE, RESOLUTION: at once
+                    presenter.set_mode(s.display_mode, s.res_w, s.res_h);
+                    s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
+                    s.save("save/settings.ini");
+                    frontend.invalidate();
+                    break;
                 case Frontend::Action::SettingsChanged:
-                    if (aspect_level(g_opt.max_aspect) != s.aspect)   // an --aspect between the levels stays until changed
+                    if (aspect_level(g_opt.max_aspect) != aspect_level_of(s.aspect))   // an --aspect between the levels stays until changed
                         renderer.set_max_aspect(g_opt.max_aspect = MAX_ASPECT[s.aspect]);
                     g_sound.set_volume(float(s.volume));
                     g_sound.set_music_gain(float(s.music));
@@ -1001,6 +1058,7 @@ int main(int argc, char** argv) {
                     r3d_set_swt_explosions(g_opt.explosions = s.explosions);
                     renderer.set_hdr(g_opt.hdr = s.hdr);
                     renderer.set_sharpen((g_opt.sharpen = s.sharpen) ? 0.5f : 0.0f);
+                    renderer.set_supersample(g_opt.supersample = s.render_scale / 100.0f);
                     if (g_opt.interp != s.smooth) {
                         g_opt.interp = s.smooth;
                         renderer.set_interpolation(1.0f);   // the latest game frame as it is
@@ -1010,16 +1068,30 @@ int main(int argc, char** argv) {
                     g_duel_invert = s.duel_invert;
                     g_sight_scale = s.sight_size / 100.0f;
                     renderer.set_picture(s.saturation / 100.0f, s.gamma / 100.0f);
-                    g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert};
+                    presenter.set_vsync(s.vsync);
+                    g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert,
+                                      s.trigger_rumble};
                     s.save("save/settings.ini");
                     break;
                 default: break;
                 }
             }
-            if (frontend.settings.fullscreen != presenter.fullscreen()) {   // also F11 / Alt+Enter
-                frontend.settings.fullscreen = presenter.fullscreen();
+            if (frontend.settings.display_mode != presenter.mode()) {   // F11 / Alt+Enter
+                frontend.settings.display_mode = presenter.mode();
                 frontend.settings.save("save/settings.ini");
                 frontend.invalidate();
+            }
+            {   // the window's inside and the desktop, for RESOLUTION; the refresh rate, for MAX FPS
+                RECT c{}, m = presenter.monitor_rect();
+                GetClientRect(presenter.hwnd(), &c);
+                int hz = int(std::lround(1.0 / std::max(display_clock.period, 1.0 / 1000)));
+                if (c.right != frontend.client_w || c.bottom != frontend.client_h || m.right - m.left != frontend.desktop_w ||
+                    m.bottom - m.top != frontend.desktop_h || hz != frontend.refresh_hz) {
+                    frontend.refresh_hz = hz;
+                    frontend.client_w = c.right, frontend.client_h = c.bottom;
+                    frontend.desktop_w = m.right - m.left, frontend.desktop_h = m.bottom - m.top;
+                    frontend.invalidate();
+                }
             }
             // Debugging aid: LW_MENU_KEYS="40,13,27" presses those keys (one
             // every 10 presents; Esc in the game pauses; "cX/Y" clicks at window
@@ -1178,8 +1250,6 @@ int main(int argc, char** argv) {
             ready_newest.reset();
         }
         double display = display_clock.tick();
-        // (dynamic resolution keeps the graphics card's time within a refresh)
-        renderer.set_gpu_budget(float(display_clock.period * 1000.0));
         std::shared_ptr<const R3DFrameState> latest;
         std::shared_ptr<Prepared> ready;
         if (interpolating) {
@@ -1441,5 +1511,28 @@ int main(int argc, char** argv) {
     renderer.shutdown();
     presenter.shutdown();
     g_pads.shutdown();
+    if (restart) {   // RESTART NOW: the same program, command line and folder, straight to the main menu
+        printf("[menu] restarting\n");
+        fflush(stdout);
+#ifdef _WIN32
+        SetEnvironmentVariableA("SWT_RESTARTED", "1");
+        wchar_t exe[MAX_PATH];
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        std::wstring cmd = GetCommandLineW();
+        STARTUPINFOW si{sizeof(si)};
+        PROCESS_INFORMATION pi{};
+        if (CreateProcessW(exe, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        } else {
+            printf("[menu] could not start the game again (%lu)\n", GetLastError());
+        }
+#else
+        setenv("SWT_RESTARTED", "1", 1);
+        std::string exe = mac_exe_path();
+        execv(exe.c_str(), argv);   // (returns only if it failed)
+        printf("[menu] could not start the game again\n");
+#endif
+    }
     ExitProcess(0);
 }

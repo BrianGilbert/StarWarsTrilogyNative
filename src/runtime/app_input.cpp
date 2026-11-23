@@ -425,9 +425,10 @@ bool poll_gamepads(HWND hwnd) {
         if (pad.event && !blocked[i]) pl.event = true;
         if (fire && !fire_was[i]) {
             g_pads.rumble(i, 0.2f, 0.5f, 70);
-            g_pads.rumble_triggers(i, 0.0f, 0.6f, 60);
+            g_pads.rumble_triggers(i, 0.0f, 1.0f, 90);
         } else if (reload && !reload_was[i]) {
             g_pads.rumble(i, 0.35f, 0.0f, 50);
+            g_pads.rumble_triggers(i, 0.8f, 0.0f, 70);
         }
         fire_was[i] = fire, reload_was[i] = reload;
         // The lever's force feedback (runtime.cpp ffb_frame): the jolts

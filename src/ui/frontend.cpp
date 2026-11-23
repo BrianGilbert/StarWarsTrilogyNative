@@ -129,19 +129,28 @@ const int WEIGHTS[6] = {FW_BOLD, FW_BOLD, FW_NORMAL, FW_SEMIBOLD, FW_MEDIUM, FW_
 // ---- Settings file ----
 
 // settings.ini's words for FrontendSettings::aspect
-static const char* const ASPECT_WORDS[] = {"4:3", "16:9", "21:9", "32:9", "48:9"};
+static const char* const ASPECT_WORDS[] = {"4:3", "16:9", "21:9", "32:9", "48:9", "auto"};
 static constexpr int ASPECT_COUNT = int(std::size(ASPECT_WORDS));
 
 void FrontendSettings::load(const char* path) {
     FILE* f = fopen(path, "r");
     if (!f) return;
     char line[512];
+    int old_fullscreen = -1;   // an older file's fullscreen = 1: the borderless one, unless display_mode is there
+    bool mode_saved = false;
     while (fgets(line, sizeof(line), f)) {
         char key[64], value[64];
         if (sscanf(line, " %63[^= ] = %63s", key, value) != 2) continue;
         std::string k = key, v = value;
         bool on = v == "1" || v == "on" || v == "true";
-        if (k == "fullscreen") fullscreen = on;
+        if (k == "fullscreen") old_fullscreen = on;
+        else if (k == "display_mode") display_mode = v == "fullscreen" ? 2 : v == "borderless" ? 1 : 0, mode_saved = true;
+        else if (k == "resolution") {
+            if (sscanf(value, "%dx%d", &res_w, &res_h) != 2 || res_w <= 0 || res_h <= 0) res_w = res_h = 0;
+        }
+        else if (k == "vsync") vsync = v == "adaptive" ? 2 : on ? 1 : 0;
+        else if (k == "max_fps") max_fps = v == "unlimited" ? -1 : v == "monitor" ? 0 : std::clamp(atoi(value), 0, 1000);
+        else if (k == "background_fps") background_fps = on;
         else if (k == "aspect") {
             for (int i = 0; i < ASPECT_COUNT; i++)
                 if (v == ASPECT_WORDS[i]) aspect = i;
@@ -160,7 +169,7 @@ void FrontendSettings::load(const char* path) {
             else if (v == "dlss_ultra") aa = 6;
 #endif
         }
-        else if (k == "supersample") supersample = atoi(value) >= 200 ? 200 : atoi(value) >= 150 ? 150 : 100;
+        else if (k == "render_scale" || k == "supersample") render_scale = std::clamp(atoi(value), 50, 200);   // (supersample: before 50-200 %)
         else if (k == "haze") haze = on;
         else if (k == "bloom") bloom = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : on ? 2 : 0;
         else if (k == "ao") ao = on;
@@ -176,6 +185,7 @@ void FrontendSettings::load(const char* path) {
         else if (k == "pad_speed") pad_speed = std::clamp(atoi(value), 1, 10);
         else if (k == "gyro") gyro = on;
         else if (k == "gyro_speed") gyro_speed = std::clamp(atoi(value), 1, 10);
+        else if (k == "trigger_rumble") trigger_rumble = std::clamp(atoi(value) / 10 * 10, 0, 100);
         else if (k == "vibration") vibration = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : 0;
         else if (k == "aim_assist") aim_assist = v == "low" ? 1 : v == "medium" ? 2 : v == "high" ? 3 : 0;
         else if (k == "splash_screens") splash = on;
@@ -188,6 +198,7 @@ void FrontendSettings::load(const char* path) {
         else if (k == "check_updates") check_updates = on;
         else if (k == "news_seen") news_seen = std::max(0, atoi(value));
     }
+    if (!mode_saved && old_fullscreen >= 0) display_mode = old_fullscreen;
     fclose(f);
 }
 
@@ -222,20 +233,24 @@ void FrontendSettings::save(const char* path) const {
     static const char* const SPEAKERS[3] = {"stereo", "surround", "headphones"};
     static const char* const RT_MODES[3] = {"off", "shadows", "ao"};
     static const char* const INVERT[4] = {"off", "x", "y", "both"};
-    fprintf(f, "fullscreen = %d\nvolume = %d\nmusic = %d\naa = %s\nhaze = %d\nbloom = %s\nao = %d\nsun = %d\nshadows = %d\nhdr = %d\nsharpen = %d\n"
+    static const char* const MODES[3] = {"window", "borderless", "fullscreen"};
+    std::string fps = max_fps < 0 ? "unlimited" : max_fps == 0 ? "monitor" : std::to_string(max_fps);
+    fprintf(f, "display_mode = %s\nresolution = %dx%d\nvsync = %s\nmax_fps = %s\nbackground_fps = %d\n",
+            MODES[std::clamp(display_mode, 0, 2)], res_w, res_h, vsync == 2 ? "adaptive" : vsync ? "on" : "off", fps.c_str(),
+            background_fps);
+    fprintf(f, "volume = %d\nmusic = %d\naa = %s\nhaze = %d\nbloom = %s\nao = %d\nsun = %d\nshadows = %d\nhdr = %d\nsharpen = %d\n"
                "saturation = %d\ngamma = %.2f\nmotion = %s\nspeakers = %s\nrear_boost = %d\nsample_interpolation = %s\n"
                "pad_speed = %d\ngyro = %d\ngyro_speed = %d\nvibration = %s\naim_assist = %s\nray_tracing = %s\n"
                "splash_screens = %d\nmenu_music = %d\npointer_aim = %s\nsight_size = %d\npad_aim = %s\npad_invert = %s\n",
-            fullscreen, volume, music, AA[aa], haze, BLOOM[bloom], ao, sun, shadows, hdr, sharpen, saturation,
+            volume, music, AA[aa], haze, BLOOM[bloom], ao, sun, shadows, hdr, sharpen, saturation,
             gamma / 100.0, smooth ? "smooth" : "original", SPEAKERS[speakers], rear_boost, cubic_samples ? "cubic" : "linear",
             pad_speed, gyro, gyro_speed, BLOOM[vibration], BLOOM[aim_assist], RT_MODES[ray_tracing],
             splash, menu_music, pointer_sight ? "sight" : "lever", sight_size, pad_lever ? "lever" : "sight", INVERT[pad_invert]);
     fprintf(f, "duel_invert = %s\n", INVERT[duel_invert]);
     fprintf(f, "aspect = %s\n", ASPECT_WORDS[aspect]);
     fprintf(f, "explosions = %s\n", explosions ? "enhanced" : "arcade");
-#ifndef _WIN32
-    fprintf(f, "supersample = %d\n", supersample);
-#endif
+    fprintf(f, "trigger_rumble = %d\n", trigger_rumble);
+    fprintf(f, "render_scale = %d\n", render_scale);
     fprintf(f, "check_updates = %d\nnews_seen = %d\n", check_updates, news_seen);
     fclose(f);
 }
@@ -352,7 +367,8 @@ const wchar_t* const Frontend::TAB_NAMES[Frontend::TAB_COUNT] = {L"EXPERIENCE", 
 // rows do not fit the page scrolls.
 const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_UPDATES, EXPERIENCE_TAB, L"UPDATES"},
-    {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB},
+    {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_RESOLUTION, DISPLAY_TAB}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB},
+    {OPT_VSYNC, DISPLAY_TAB}, {OPT_MAXFPS, DISPLAY_TAB}, {OPT_BGFPS, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB},
     {OPT_SAT, DISPLAY_TAB, L"PICTURE"}, {OPT_GAMMA, DISPLAY_TAB}, {OPT_SHARPEN, DISPLAY_TAB},
     {OPT_SUN, GRAPHICS_TAB, L"LIGHTING"}, {OPT_SHADOWS, GRAPHICS_TAB}, {OPT_HDR, GRAPHICS_TAB}, {OPT_AO, GRAPHICS_TAB},
     {OPT_BLOOM, GRAPHICS_TAB}, {OPT_HAZE, GRAPHICS_TAB},
@@ -364,7 +380,7 @@ const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_SIGHT, CONTROLS_TAB, L"SIGHT"}, {OPT_POINTER, CONTROLS_TAB},
     {OPT_PAD_AIM, CONTROLS_TAB, L"GAMEPAD"}, {OPT_PAD_SPEED, CONTROLS_TAB}, {OPT_PAD_INVERT, CONTROLS_TAB}, {OPT_ASSIST, CONTROLS_TAB},
     {OPT_GYRO, CONTROLS_TAB, L"GYRO"}, {OPT_GYRO_SPEED, CONTROLS_TAB},
-    {OPT_VIBRATION, CONTROLS_TAB, L"RUMBLE"},
+    {OPT_VIBRATION, CONTROLS_TAB, L"RUMBLE"}, {OPT_TRIGGERS, CONTROLS_TAB},
     {OPT_DUEL_INVERT, CONTROLS_TAB, L"DUELS"},
 };
 
@@ -464,7 +480,7 @@ std::vector<Frontend::Item> Frontend::items() const {
     }
     case Screen::Options: {
         std::wstring aa_hint = settings.aa != aa_at_launch
-                                   ? L"Edge smoothing.  Takes effect the next time the game starts"
+                                   ? L"Edge smoothing.  Applies after a restart (offered when you leave the settings)"
                                    :
 #ifdef __APPLE__
                                      L"Edge smoothing (MSAA 4x, 8x or off).  Applies on the next start";
@@ -474,13 +490,14 @@ std::vector<Frontend::Item> Frontend::items() const {
         wchar_t gamma_text[16];
         swprintf(gamma_text, 16, L"%.2f", settings.gamma / 100.0);
         static const wchar_t* const RT_MODES[3] = {L"OFF", L"SHADOWS", L"SHADOWS + AO"};
-        static const wchar_t* const ASPECT_NAMES[5] = {L"4:3 (ORIGINAL)", L"16:9", L"21:9", L"32:9", L"48:9"};
-        static const wchar_t* const ASPECT_HINTS[5] = {
+        static const wchar_t* const ASPECT_NAMES[6] = {L"4:3 (ORIGINAL)", L"16:9", L"21:9", L"32:9", L"48:9", L"AUTO"};
+        static const wchar_t* const ASPECT_HINTS[6] = {
             L"The arcade's own 4:3 picture, with bars at the sides",
             L"Widest 3D view 16:9.  Narrower windows show less, never stretched",
             L"Widest 3D view 21:9: fills ultrawide monitors (2560x1080, 3440x1440)",
             L"Widest 3D view 32:9: fills super ultrawide monitors (3840x1080, 5120x1440)",
-            L"Widest 3D view 48:9: fills three monitors side by side (5760x1080, 7680x1440)"};
+            L"Widest 3D view 48:9: fills three monitors side by side (5760x1080, 7680x1440)",
+            L"The 3D view fills the window, whatever its shape (up to 48:9)"};
         static const wchar_t* const RT_HINTS[3] = {
             L"Shadows from a shadow map and occlusion from the depth, as without ray tracing",
             L"Sun shadows traced through the world: every ship, walker and tree, soft with distance",
@@ -491,8 +508,42 @@ std::vector<Frontend::Item> Frontend::items() const {
             for (wchar_t c : gamepads) connected += wchar_t(towupper(c));
             if (connected.size() > 24) connected = connected.substr(0, 23) + L"\u2026";
         }
-        std::vector<Item> all = {{OPT_DISPLAY, L"DISPLAY", settings.fullscreen ? L"FULLSCREEN" : L"WINDOW",
-                 pad_prompts ? L"Window or full screen" : L"Window or full screen (also F11 or Alt+Enter)"},
+        static const wchar_t* const MODES[3] = {L"WINDOW", L"BORDERLESS", L"FULLSCREEN"};
+        static const wchar_t* const MODE_HINTS[3] = {
+            L"A window you can move and resize",
+            L"Full screen at the desktop's resolution, the monitor left as it is: quick to switch to other windows",
+            L"Exclusive full screen: the monitor switches to the RESOLUTION below while the game runs"};
+        const int mode = std::clamp(settings.display_mode, 0, 2);
+        auto size_text = [](int w, int h) { return std::to_wstring(w) + L" x " + std::to_wstring(h); };
+        // the chosen mode (the window without one: its inside); BORDERLESS the desktop's
+        std::wstring res = mode == 1 ? size_text(desktop_w, desktop_h)
+                           : settings.res_w > 0 ? size_text(settings.res_w, settings.res_h)
+                           : mode == 0 ? size_text(client_w, client_h) : size_text(desktop_w, desktop_h);
+        std::wstring res_hints[3] = {
+            L"The size of the window's picture.  Enter: the list",
+            L"BORDERLESS always uses the desktop's resolution",
+            L"The mode the monitor switches to.  Enter: the list"};
+        if (pad_prompts) res_hints[0] = L"The size of the window's picture.  A: the list", res_hints[2] = L"The mode the monitor switches to.  A: the list";
+        if (mode == 0 && settings.res_w > 0 && (std::abs(client_w - settings.res_w) > 2 || std::abs(client_h - settings.res_h) > 2))
+            res_hints[0] = L"The size of the window's picture: shown at " + size_text(client_w, client_h) +
+                           L", the same shape, to fit on the desktop";
+        std::vector<Item> all = {{OPT_DISPLAY, L"MODE", MODES[mode],
+                 std::wstring(MODE_HINTS[mode]) + (pad_prompts ? L"" : L" (F11 or Alt+Enter: window / full screen)")},
+                {OPT_RESOLUTION, L"RESOLUTION", res, res_hints[mode], mode != 1 && !resolutions.empty()},
+                {OPT_VSYNC, L"VSYNC", settings.vsync == 2 ? L"ADAPTIVE" : settings.vsync ? L"ON" : L"OFF",
+                 settings.vsync == 2 ? L"In step with the refreshes while the game keeps up with them; when a picture is late it goes out at once (less stutter, it may tear then)"
+                 : settings.vsync    ? L"Pictures in step with the monitor's refreshes: no tearing"
+                                     : L"Less latency; the picture may tear without G-SYNC or FreeSync"},
+                {OPT_MAXFPS, L"MAX FPS",
+                 settings.max_fps < 0    ? std::wstring(L"UNLIMITED")
+                 : settings.max_fps == 0 ? L"MONITOR (" + std::to_wstring(refresh_hz) + L")"
+                                         : std::to_wstring(settings.max_fps),
+                 !settings.smooth ? std::wstring(L"With MOTION ORIGINAL the game's own 57.5 frames are shown: nothing to set")
+                 : settings.vsync ? std::wstring(L"Pictures a second at most; with VSYNC in whole refreshes (60 on a 120 Hz monitor: every other one).  Lower: less work for the GPU")
+                                  : std::wstring(L"Pictures a second at most (UNLIMITED: as many as the GPU can).  Any number can go in settings.ini, e.g. max_fps = 117 for G-SYNC"),
+                 settings.smooth},
+                {OPT_BGFPS, L"BACKGROUND FPS", on_off(settings.background_fps),
+                 L"On: 30 pictures a second at most while another window has the focus"},
                 {OPT_ASPECT, L"WIDESCREEN", ASPECT_NAMES[settings.aspect], ASPECT_HINTS[settings.aspect]},
                 {OPT_MOTION, L"MOTION", settings.smooth ? L"SMOOTH" : L"ORIGINAL",
                  L"Smooth: the 3D is also drawn between the game's 57.5 frames, at your monitor's refresh rate"},
@@ -506,10 +557,8 @@ std::vector<Frontend::Item> Frontend::items() const {
                 {OPT_SAMPLES, L"SAMPLE QUALITY", settings.cubic_samples ? L"SMOOTH" : L"ORIGINAL",
                  L"Smooth interpolation of the instrument and voice samples, or the original chip's"},
                 {OPT_AA, L"ANTI-ALIASING", AA[settings.aa], aa_hint},
-#ifndef _WIN32   // macOS and Linux (Windows has DLAA)
-                {OPT_SCALE, L"SUPERSAMPLING", settings.supersample == 100 ? L"OFF" : settings.supersample == 150 ? L"1.5X" : L"2X",
-                 L"The 3D drawn larger and scaled down: smoother edges and textures.  Applies on the next start"},
-#endif
+                {OPT_SCALE, L"RENDER SCALE", std::to_wstring(settings.render_scale) + L"%",
+                 L"The 3D drawn at this share of the picture's size: above 100% sharper and slower, below faster and softer"},
                 {OPT_HAZE, L"DISTANCE HAZE", on_off(settings.haze),
                  L"Far scenery on Hoth and Endor fades into the sky instead of appearing suddenly"},
                 {OPT_BLOOM, L"BLOOM", BLOOM_LEVELS[settings.bloom], L"Soft glow around lasers, explosions, engines and lights"},
@@ -556,6 +605,8 @@ std::vector<Frontend::Item> Frontend::items() const {
                  L"How far the sight moves when you turn the gamepad"},
                 {OPT_VIBRATION, L"VIBRATION", BLOOM_LEVELS[settings.vibration],
                  L"The gamepad rumbles when you fire and when you are hit"},
+                {OPT_TRIGGERS, L"TRIGGER RUMBLE", settings.trigger_rumble ? std::to_wstring(settings.trigger_rumble) + L"%" : std::wstring(L"OFF"),
+                 L"Xbox One / Series pads: the trigger kicks when you fire, the other when you reload (a share of VIBRATION)"},
                 {OPT_ASSIST, L"AIM ASSIST", BLOOM_LEVELS[settings.aim_assist],
                  L"With a gamepad the sight slows down over the enemy ships and follows them a little"},
                 {OPT_CONNECTED, L"CONNECTED", connected,
@@ -621,6 +672,7 @@ void Frontend::open(Screen s) {
     screen_ = s;
     bool page = s == Screen::Options || s == Screen::Records;
     if (page) tab_ = 0;   // the first section
+    drop_open_ = restart_open_ = false;
     selected_ = page ? 1 : 0;   // the settings page and the records: their first row (the sections are not one)
     scroll_ = 0;
     hovered_ = -1;
@@ -650,7 +702,36 @@ void Frontend::activate(const Item& it, int dir) {
     case BACK: back(); break;
     case RESUME: push(Action::Resume); break;
     case SETTINGS: options_from_pause_ = true; open(Screen::Options); break;
-    case OPT_DISPLAY: push(Action::ToggleFullscreen); break;
+    case OPT_DISPLAY:   // applied at once (app.cpp)
+        settings.display_mode = (settings.display_mode + dir + 3) % 3;
+        push(Action::DisplayChanged);
+        break;
+    case OPT_RESOLUTION: {
+        if (settings.display_mode == 1 || resolutions.empty()) break;
+        int n = int(resolutions.size()), i = resolution_index();   // the next mode of the monitor's list from the chosen one
+        drop_pick((i + dir + n) % n);
+        break;
+    }
+    case OPT_VSYNC: {   // ON, ADAPTIVE, OFF
+        static const int ORDER[3] = {1, 2, 0};
+        int i = settings.vsync == 2 ? 1 : settings.vsync ? 0 : 2;
+        settings.vsync = ORDER[(i + dir + 3) % 3];
+        push(Action::SettingsChanged);
+        break;
+    }
+    case OPT_BGFPS: settings.background_fps = !settings.background_fps; push(Action::SettingsChanged); break;
+    case OPT_MAXFPS: {
+        if (!settings.smooth) break;
+        static const int STEPS[] = {0, 30, 60, 90, 120, 144, 165, 240, -1};   // MONITOR first, UNLIMITED last
+        int n = int(std::size(STEPS)), i = -1;
+        for (int k = 0; k < n; k++)
+            if (STEPS[k] == settings.max_fps) i = k;
+        if (i < 0)   // a number set in settings.ini: the step above or below it
+            for (i = 1; i < n - 1 && STEPS[i] < settings.max_fps; i++) {}
+        settings.max_fps = STEPS[(i + dir + n) % n];
+        push(Action::SettingsChanged);
+        break;
+    }
     case OPT_VOLUME:
         settings.volume = dir > 0 && settings.volume == 10 && wrap_ ? 0 : std::clamp(settings.volume + dir, 0, 10);
         push(Action::SettingsChanged);
@@ -659,7 +740,7 @@ void Frontend::activate(const Item& it, int dir) {
         settings.music = dir > 0 && settings.music == 10 && wrap_ ? 0 : std::clamp(settings.music + dir, 0, 10);
         push(Action::SettingsChanged);
         break;
-    case OPT_ASPECT: settings.aspect = (settings.aspect + dir + 5) % 5; push(Action::SettingsChanged); break;
+    case OPT_ASPECT: settings.aspect = (settings.aspect + dir + ASPECT_COUNT) % ASPECT_COUNT; push(Action::SettingsChanged); break;
     case OPT_UPDATES: settings.check_updates = !settings.check_updates; push(Action::SettingsChanged); break;
     case OPT_MENU_MUSIC: settings.menu_music = !settings.menu_music; push(Action::SettingsChanged); break;
     case OPT_SPEAKERS: settings.speakers = (settings.speakers + dir + 3) % 3; push(Action::SettingsChanged); break;
@@ -673,11 +754,15 @@ void Frontend::activate(const Item& it, int dir) {
         push(Action::SettingsChanged);
         break;
     }
-    case OPT_SCALE: settings.supersample = settings.supersample == 100 ? (dir > 0 ? 150 : 200)
-                                         : settings.supersample == 150 ? (dir > 0 ? 200 : 100)
-                                                                       : (dir > 0 ? 100 : 150);
+    case OPT_SCALE: {
+        static const int STEPS[] = {50, 67, 75, 85, 100, 125, 150, 175, 200};
+        int n = int(std::size(STEPS)), i = 4;
+        for (int k = 0; k < n; k++)
+            if (STEPS[k] <= settings.render_scale) i = k;
+        settings.render_scale = STEPS[(i + dir + n) % n];
         push(Action::SettingsChanged);
         break;
+    }
     case OPT_HAZE: settings.haze = !settings.haze; push(Action::SettingsChanged); break;
     case OPT_BLOOM: settings.bloom = (settings.bloom + dir + 4) % 4; push(Action::SettingsChanged); break;
     case OPT_AO: settings.ao = !settings.ao; push(Action::SettingsChanged); break;
@@ -706,6 +791,11 @@ void Frontend::activate(const Item& it, int dir) {
         push(Action::SettingsChanged);
         break;
     case OPT_VIBRATION: settings.vibration = (settings.vibration + dir + 4) % 4; push(Action::SettingsChanged); break;
+    case OPT_TRIGGERS:   // OFF..100 % in steps of 10; a click past the top starts again from OFF
+        settings.trigger_rumble = dir > 0 && settings.trigger_rumble >= 100 && wrap_
+                                      ? 0 : std::clamp(settings.trigger_rumble + 10 * dir, 0, 100);
+        push(Action::SettingsChanged);
+        break;
     case OPT_ASSIST: settings.aim_assist = (settings.aim_assist + dir + 4) % 4; push(Action::SettingsChanged); break;
     case OPT_SAT:   // 0..200 % in steps of 10; a click past the top starts again from the bottom
         settings.saturation = dir > 0 && settings.saturation >= 200 && wrap_
@@ -731,6 +821,12 @@ void Frontend::back() {
     switch (screen_) {
     case Screen::Play: open(Screen::Main); break;
     case Screen::Options:
+        if (!restart_open_ && !restart_list().empty()) {   // RESTART THE GAME? first (LATER: back as here)
+            restart_open_ = true;
+            restart_button_ = 0;
+            dirty_ = true;
+            return;
+        }
         open(options_from_pause_ ? Screen::Pause : Screen::Main);
         selected_ = options_from_pause_ ? 1 : index_of(OPTIONS);   // where the options were opened from
         break;
@@ -760,8 +856,22 @@ bool Frontend::key(int vk) {
     }
     if (starting) return true;   // nothing to choose while the game starts
     if (news_open_ && screen_ == Screen::Main) return news_key(vk);
+    if (drop_open_) return drop_key(vk);
+    if (restart_open_) {
+        switch (vk) {
+        case VK_LEFT: case 'A': case VK_RIGHT: case 'D': case VK_TAB: restart_button_ ^= 1; dirty_ = true; break;
+        case VK_RETURN: case VK_SPACE: restart_choose(restart_button_); break;
+        case VK_ESCAPE: case VK_BACK: restart_choose(1); break;   // LATER
+        }
+        return true;
+    }
     auto list = items();
     int n = int(list.size());
+    if (screen_ == Screen::Options && (vk == VK_RETURN || vk == VK_SPACE) && selected_ > 0 && selected_ < n &&
+        list[selected_].id == OPT_RESOLUTION && list[selected_].enabled) {   // RESOLUTION: Enter opens its list
+        open_drop();
+        return true;
+    }
     bool option_row = selected_ < n && list[selected_].id >= OPT_DISPLAY;
     bool tabs_row = selected_ < n && list[selected_].id == TABS;
     if (screen_ == Screen::Records) switch (vk) {   // sections and rows as on the settings page; nothing to change
@@ -997,6 +1107,16 @@ void Frontend::mouse_move(int x, int y) {
         if (hot >= 0) news_button_ = hot;
         return;
     }
+    if (restart_open_) {   // the button under the pointer
+        for (int b = 0; b < 2; b++)
+            if (PtInRect(&restart_buttons_[b], POINT{x, y}) && b != restart_button_) restart_button_ = b, dirty_ = true;
+        return;
+    }
+    if (drop_open_) {   // the list's entry under the pointer
+        for (int k = 0; k < int(drop_rects_.size()); k++)
+            if (PtInRect(&drop_rects_[k], POINT{x, y}) && drop_top_ + k != drop_sel_) drop_sel_ = drop_top_ + k, dirty_ = true;
+        return;
+    }
     int hit = -1;
     for (size_t i = 0; i < hit_.size(); i++) {
         POINT p{x, y};
@@ -1018,6 +1138,18 @@ void Frontend::click(int x, int y) {
             if (PtInRect(&news_buttons_[b], p)) news_choose(b);
         return;
     }
+    if (restart_open_) {   // only its two buttons
+        for (int b = 0; b < 2; b++)
+            if (PtInRect(&restart_buttons_[b], p)) restart_choose(b);
+        return;
+    }
+    if (drop_open_) {   // a resolution, or away from the list: closed
+        for (int k = 0; k < int(drop_rects_.size()); k++)
+            if (PtInRect(&drop_rects_[k], p)) { drop_pick(drop_top_ + k); return; }
+        drop_open_ = false;
+        dirty_ = true;
+        return;
+    }
     if (PtInRect(&more_up_, p) || PtInRect(&more_down_, p)) {   // the scroll arrows of a long section
         int n = int(items().size());
         int k = std::clamp(selected_ - 1, 0, n - 3) + (PtInRect(&more_up_, p) ? -1 : 1);
@@ -1027,6 +1159,10 @@ void Frontend::click(int x, int y) {
     mouse_move(x, y);
     auto list = items();
     if (hovered_ < 0 || hovered_ >= int(list.size()) || !list[hovered_].enabled) return;
+    if (list[hovered_].id == OPT_RESOLUTION) {   // its list
+        open_drop();
+        return;
+    }
     if (list[hovered_].id == TABS) {   // the section under the pointer
         for (int t = 0; t < int(tab_rects_.size()); t++)
             if (PtInRect(&tab_rects_[t], p)) set_tab(t);
@@ -1043,7 +1179,11 @@ void Frontend::click(int x, int y) {
 }
 
 void Frontend::wheel(int x, int y, int delta) {
-    if (starting || screen_ == Screen::Splash || (news_open_ && screen_ == Screen::Main)) return;
+    if (starting || screen_ == Screen::Splash || (news_open_ && screen_ == Screen::Main) || restart_open_) return;
+    if (drop_open_) {
+        drop_key(delta > 0 ? VK_UP : VK_DOWN);
+        return;
+    }
     mouse_move(x, y);
     auto list = items();
     bool on_value = hovered_ >= 0 && hovered_ < int(values_.size()) && values_[hovered_].left >= 0 &&
@@ -1915,6 +2055,7 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
 
     // The panel at the right: what the chosen row is and does
     const int px1 = w - mx, pad = U(wide ? 36.0f : 26.0f);
+    panel_rect_ = {panel_x0, top - U(8), px1, bottom};
     fill(panel_x0, top - U(8), px1, bottom, PANEL, over_game ? 0.95f : 0.62f);
     frame(panel_x0, top - U(8), px1, bottom, std::max(1, U(1)), PAGE_LINE, 1);
     fill(panel_x0, top - U(8), px1, top - U(8) + std::max(2, U(4)), SABER, 1);
@@ -1960,6 +2101,139 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
                                  {nullptr, L"Q / E", L"SECTION"}, {nullptr, L"ESC", L"BACK"}};
     int kh = U(34), kx = mx;
     for (const Key& k : keys) prompt(kx, h - U(38) - kh / 2, kh, k.pad, k.key, k.what);
+}
+
+// ---- RESTART THE GAME? ----
+
+std::wstring Frontend::restart_list() const {
+#ifdef __APPLE__
+    static const wchar_t* const AA_NAMES[3] = {L"MSAA 4X", L"MSAA 8X", L"OFF"};
+#else
+    static const wchar_t* const AA_NAMES[AA_COUNT] = {L"MSAA 4X", L"DLAA", L"OFF", L"DLSS QUALITY", L"DLSS BALANCED",
+                                                      L"DLSS PERFORMANCE", L"DLSS ULTRA PERFORMANCE"};
+#endif
+    if (settings.aa != aa_at_launch)
+        return std::wstring(L"ANTI-ALIASING ") + AA_NAMES[std::clamp(settings.aa, 0, AA_COUNT - 1)];
+    return L"";
+}
+
+void Frontend::restart_choose(int button) {
+    dirty_ = true;
+    if (button == 0) {   // RESTART NOW: app.cpp saves, closes and starts the game again
+        restart_open_ = false;
+        push(Action::Restart);
+        return;
+    }
+    back();   // LATER: on, as BACK (the prompt is not asked again)
+}
+
+void Frontend::draw_restart() {
+    auto U = [&](float v) { return int(v * u_ + 0.5f); };
+    const int w = w_, h = h_;
+    fill(0, 0, w, h, 0x000000, 0.55f);
+    int pw = std::min(U(900), w - U(80)), ph = U(over_game() ? 360.0f : 320.0f);
+    int x0 = (w - pw) / 2, y0 = (h - ph) / 2, x1 = x0 + pw, y1 = y0 + ph, cx = w / 2;
+    fill(x0, y0, x1, y1, PANEL, 1);
+    frame(x0, y0, x1, y1, std::max(1, U(1)), PAGE_LINE, 1);
+    fill(x0, y0, x1, y0 + std::max(2, U(4)), SABER, 1);
+    text(TITLE, U(52), L"RESTART THE GAME?", cx, y0 + U(30), 1, {0xFFFFFF, 0xE2EAF4, 0, 0, 1, U(3)});
+    int y = y0 + U(104);
+    std::wstring list = restart_list();
+    for (const std::wstring& line : wrap(BODY, U(26), list + (list.find(L" and ") != std::wstring::npos ? L" need a restart" : L" needs a restart"),
+                                         pw - U(80))) {
+        text(BODY, U(26), line, cx, y, 1, {GOLD_TOP, GOLD_BOTTOM});
+        y += U(36);
+    }
+    if (over_game()) text(BODY, U(22), L"The game in progress will be lost.  LATER keeps it", cx, y + U(4), 1, {0xFF9A8E, 0xFF9A8E});
+    static const wchar_t* const NAMES[2] = {L"RESTART NOW", L"LATER"};
+    int bw = U(280), bh = U(64), gap = U(40), bx = cx - bw - gap / 2, by = y1 - U(36) - bh;
+    for (int b = 0; b < 2; b++) {
+        int x = bx + b * (bw + gap);
+        bool sel = b == restart_button_;
+        if (sel) page_band(x + U(13), by, x + bw, by + bh, 0.5f, 0.2f, 1);
+        else frame(x, by, x + bw, by + bh, std::max(1, U(1)), PAGE_LINE, 1);
+        text(TITLE, U(38), NAMES[b], x + bw / 2, by + bh / 2 - U(38) * 75 / 100, 1,
+             sel ? Style{GOLD_TOP, GOLD_BOTTOM, 0, 0, 1, U(2)} : Style{PAGE_TEXT, PAGE_TEXT, 0, 0, 1, U(2)});
+        restart_buttons_[b] = {x, by, x + bw, by + bh};
+    }
+}
+
+// ---- RESOLUTION's list ----
+
+int Frontend::resolution_index() const {
+    int n = int(resolutions.size());
+    int cw = settings.res_w > 0 ? settings.res_w : settings.display_mode == 0 ? client_w : desktop_w;
+    int ch = settings.res_w > 0 ? settings.res_h : settings.display_mode == 0 ? client_h : desktop_h;
+    int best = 0;
+    for (int k = 1; k < n; k++)
+        if (std::abs(resolutions[size_t(k)].first - cw) + std::abs(resolutions[size_t(k)].second - ch) <
+            std::abs(resolutions[size_t(best)].first - cw) + std::abs(resolutions[size_t(best)].second - ch))
+            best = k;
+    return best;
+}
+
+void Frontend::open_drop() {
+    if (resolutions.empty()) return;
+    drop_sel_ = int(resolutions.size()) - 1 - resolution_index();   // (the list is largest first)
+    drop_top_ = 0;
+    drop_open_ = true;
+    dirty_ = true;
+}
+
+void Frontend::drop_pick(int i) {   // i: into resolutions (smallest first)
+    drop_open_ = false;
+    dirty_ = true;
+    if (i < 0 || i >= int(resolutions.size())) return;
+    settings.res_w = resolutions[size_t(i)].first;   // applied at once
+    settings.res_h = resolutions[size_t(i)].second;
+    push(Action::DisplayChanged);
+}
+
+bool Frontend::drop_key(int vk) {
+    int n = int(resolutions.size());
+    switch (vk) {
+    case VK_UP: case 'W': drop_sel_ = (drop_sel_ + n - 1) % n; break;
+    case VK_DOWN: case 'S': drop_sel_ = (drop_sel_ + 1) % n; break;
+    case VK_PRIOR: drop_sel_ = std::max(0, drop_sel_ - 8); break;
+    case VK_NEXT: drop_sel_ = std::min(n - 1, drop_sel_ + 8); break;
+    case VK_RETURN: case VK_SPACE: drop_pick(n - 1 - drop_sel_); return true;
+    case VK_ESCAPE: case VK_BACK: drop_open_ = false; break;
+    default: return true;
+    }
+    dirty_ = true;
+    return true;
+}
+
+// Over the description panel: the monitor's modes, largest first, the one in use marked
+void Frontend::draw_drop() {
+    auto U = [&](float v) { return int(v * u_ + 0.5f); };
+    RECT pr = panel_rect_;
+    if (pr.right <= pr.left) return;
+    int n = int(resolutions.size()), row = U(44), head = U(64);
+    int x0 = pr.left, x1 = pr.right, y0 = pr.top;
+    int shown = std::max(1, std::min(n, int((pr.bottom - y0 - head - U(16)) / row)));
+    if (drop_sel_ < drop_top_) drop_top_ = drop_sel_;
+    if (drop_sel_ >= drop_top_ + shown) drop_top_ = drop_sel_ - shown + 1;
+    int y1 = y0 + head + shown * row + U(16);
+    fill(x0, y0, x1, pr.bottom, PANEL, 1);   // (the whole panel: its description must not show through)
+    frame(x0, y0, x1, y1, std::max(1, U(1)), PAGE_LINE, 1);
+    fill(x0, y0, x1, y0 + std::max(2, U(4)), SABER, 1);
+    text(ROW_MEDIUM, U(22), L"RESOLUTION", x0 + U(28), y0 + U(22), 0, {GROUP_BLUE, GROUP_BLUE});
+    drop_rects_.clear();
+    const int chosen = n - 1 - resolution_index();
+    for (int k = 0; k < shown && drop_top_ + k < n; k++) {
+        int i = drop_top_ + k, y = y0 + head + k * row;
+        const auto& r = resolutions[size_t(n - 1 - i)];
+        bool sel = i == drop_sel_, in_use = i == chosen;
+        if (sel) page_band(x0 + U(30), y, x1 - U(12), y + row, 0.22f, 0.5f, 1);
+        std::wstring label = std::to_wstring(r.first) + L" x " + std::to_wstring(r.second);
+        text(ROW, U(30), label, x0 + U(52), y + row / 2 - U(30) * 75 / 100, 0,
+             sel ? Style{GOLD_TOP, GOLD_BOTTOM, 0, 0, 1, U(2)} : Style{PAGE_TEXT, PAGE_TEXT, 0, 0, 1, U(2)});
+        if (in_use) text(ROW_MEDIUM, U(18), L"IN USE", x1 - U(28), y + row / 2 - U(10), 2, {GROUP_BLUE, GROUP_BLUE});
+        drop_rects_.push_back({x0, y, x1, y + row});
+    }
+    if (drop_top_ > 0) triangle((x0 + x1) / 2, y0 + head - U(10), U(16), -2, GOLD_BOTTOM, 1);
+    if (drop_top_ + shown < n) triangle((x0 + x1) / 2, y1 - U(8), U(16), 2, GOLD_BOTTOM, 1);
 }
 
 // ---- Splash screens ----
@@ -2144,6 +2418,8 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
     auto list = items();
     if (page) {   // the settings page (and the records in its look)
         draw_options_page(list, over_game);
+        if (drop_open_) draw_drop();
+        if (restart_open_) draw_restart();
         dirty_ = gliding_;   // a band gliding: drawn again every refresh
         fade_in();
         return true;

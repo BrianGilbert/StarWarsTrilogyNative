@@ -104,6 +104,14 @@ int main() {
         settings_from_options(settings, o);
         options_from_settings(o, settings);
         CHECK(close_to(o.max_aspect, 2.6f));   // the menu keeps a custom ratio within a named level
+        FrontendSettings auto_view;   // AUTO: 48:9's level, and still AUTO in the menu after
+        auto_view.aspect = 5;
+        Options wide;
+        options_from_settings(wide, auto_view);
+        CHECK(close_to(wide.max_aspect, 6.0f));
+        settings_from_options(auto_view, wide);
+        CHECK(auto_view.aspect == 5);
+        CHECK(parse(wide, {"--aspect", "auto"}) && close_to(wide.max_aspect, 6.0f));
     }
     {   // run modes
         Options o;

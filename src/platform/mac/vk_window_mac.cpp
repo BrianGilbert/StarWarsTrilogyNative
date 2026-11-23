@@ -122,13 +122,6 @@ void VkPresenter::set_cursor_visible(bool visible) {
     else SDL_HideCursor();
 }
 
-void VkPresenter::toggle_fullscreen() {
-    if (g_background) return;
-    fullscreen_ = !fullscreen_;
-    SDL_SetWindowFullscreen(g_window, fullscreen_);
-    resized_ = true;
-}
-
 bool VkPresenter::pump() {
     SDL_PumpEvents();
     float density = SDL_GetWindowPixelDensity(g_window);

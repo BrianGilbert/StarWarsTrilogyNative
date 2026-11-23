@@ -2248,7 +2248,7 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
     f.up_h = std::max(1u, uint32_t(SCREEN_H * f.lay.scale * supersample_));
     f.full_w = upscale_ > 1.0f ? std::max(1u, uint32_t(float(f.up_w) / upscale_ + 0.5f)) : f.up_w;
     f.full_h = upscale_ > 1.0f ? std::max(1u, uint32_t(float(f.up_h) / upscale_ + 0.5f)) : f.up_h;
-    {   // (once per size: the 3D's own resolution)
+    {   // (once per size: the 3D's own resolution, RENDER SCALE / --scale)
         static uint32_t logged_w = 0, logged_h = 0;
         if (f.full_w != logged_w || f.full_h != logged_h) {
             logged_w = f.full_w, logged_h = f.full_h;

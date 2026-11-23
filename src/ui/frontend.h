@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../runtime/stats.h"
@@ -24,8 +25,12 @@
 #include "splash_video.h"
 
 struct FrontendSettings {
-    bool fullscreen = false;
-    int aspect = 1;    // widest 3D view: 0 4:3 (original), 1 16:9, 2 21:9, 3 32:9, 4 48:9 (MAX_ASPECT in settings_bridge.cpp)
+    int display_mode = 0;      // MODE: 0 window, 1 borderless (the desktop's resolution), 2 exclusive full screen
+    int res_w = 0, res_h = 0;  // RESOLUTION: the window's inside, or the full-screen mode (0: default window / the desktop's)
+    int vsync = 1;             // VSYNC: 1 on (FIFO), 2 adaptive (FIFO_RELAXED), 0 off (IMMEDIATE, else MAILBOX)
+    int max_fps = 0;           // MAX FPS: 0 the monitor's refresh rate, -1 UNLIMITED, else pictures a second at most
+    bool background_fps = true;   // BACKGROUND FPS: 30 a second at most while another window has the focus
+    int aspect = 1;    // widest 3D view: 0 4:3 (original), 1 16:9, 2 21:9, 3 32:9, 4 48:9, 5 AUTO (MAX_ASPECT in settings_bridge.cpp)
     int volume = 5;    // 0..10 (output gain): the sound effects and voices
     int music = 5;     // 0..10: the music board's gain
     int speakers = 0;  // 0 stereo, 1 surround 4.0, 2 headphones (AudioStream::Speakers)
@@ -37,7 +42,7 @@ struct FrontendSettings {
     int aa = 0;        // 0 MSAA, 1 DLAA, 2 off, 3 DLSS QUALITY, 4 BALANCED, 5 PERFORMANCE, 6 ULTRA PERFORMANCE
                        // (takes effect on the next launch)
 #endif
-    int supersample = 100;   // the 3D drawn at this % of the window and scaled down (the macOS and Linux menu: 100, 150, 200)
+    int render_scale = 100;  // RENDER SCALE, %: the 3D drawn at this share of the picture's size (--scale), 50..200
     bool haze = true;  // distance haze
     int bloom = 2;     // glow around bright things: 0 off, 1 low, 2 medium, 3 high
     bool ao = true;    // ambient occlusion
@@ -54,6 +59,7 @@ struct FrontendSettings {
     bool gyro = false;      // the gamepad's gyroscope moves the sight (CONTROLS > GYRO AIM turns it on)
     int gyro_speed = 5;     // 1..10
     int vibration = 2;      // gamepad vibration: 0 off, 1 low, 2 medium, 3 high
+    int trigger_rumble = 100;   // the triggers' own motors (Xbox One / Series pads), % of VIBRATION's strength, steps of 10
     int aim_assist = 1;     // gamepad aim assist: 0 off, 1 low, 2 medium, 3 high
     bool pad_lever = false; // the gamepad's sticks are the flight lever (back to the centre when let go)
     int pad_invert = 0;     // the sticks' axes turned round: 0 off, 1 x, 2 y, 3 both
@@ -73,8 +79,10 @@ struct FrontendSettings {
 class Frontend {
 public:
     enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug };
-    enum class Action { None, StartArcade, Resume, Quit, ToggleFullscreen, SettingsChanged,
-                        QuitToMenu, StartDebug };
+    // DisplayChanged: MODE or RESOLUTION, applied to the window at once.
+    // Restart: RESTART NOW (app.cpp saves, closes and starts the game again)
+    enum class Action { None, StartArcade, Resume, Quit, DisplayChanged, SettingsChanged,
+                        QuitToMenu, StartDebug, Restart };
 
     bool init(const std::string& font_dir);
     void shutdown();
@@ -104,6 +112,9 @@ public:
     std::wstring gamepads;  // the pads connected, for OPTIONS > CONTROLS > CONNECTED ("" = none)
     bool gyro_pad = false;  // one of them has a gyroscope
     bool pad_prompts = false;   // a gamepad drives the menu: its buttons in the key help and hints, not the keyboard's
+    std::vector<std::pair<int, int>> resolutions;   // the monitor's (app.cpp, VkPresenter::display_modes), smallest first
+    int client_w = 0, client_h = 0, desktop_w = 0, desktop_h = 0;   // the window's inside, the desktop (app.cpp)
+    int refresh_hz = 60;                            // the monitor's (MAX FPS MONITOR)
 
     // At launch: news.txt from GitHub in the background (when the settings
     // allow it). An entry newer than the news.txt here and than the last one
@@ -130,7 +141,7 @@ private:
         // the settings' rows: OPT_DISPLAY first (key() and wheel(): an option row is one from it on)
         OPT_DISPLAY, OPT_VOLUME, OPT_MUSIC, OPT_SPEAKERS, OPT_REAR, OPT_SAMPLES, OPT_AA, OPT_HAZE, OPT_BLOOM, OPT_AO, OPT_SUN, OPT_SHADOWS, OPT_HDR, OPT_SHARPEN,
         OPT_SAT, OPT_GAMMA, OPT_MOTION, OPT_PAD_SPEED, OPT_GYRO, OPT_GYRO_SPEED, OPT_VIBRATION, OPT_ASSIST, OPT_RT, OPT_MENU_MUSIC, OPT_POINTER, OPT_SIGHT, OPT_PAD_AIM, OPT_PAD_INVERT, OPT_DUEL_INVERT, OPT_UPDATES, OPT_SCALE,
-        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED,
+        OPT_ASPECT, OPT_EXPLOSIONS, OPT_CONNECTED, OPT_RESOLUTION, OPT_VSYNC, OPT_MAXFPS, OPT_BGFPS, OPT_TRIGGERS,
     };
     struct Item {
         Id id;
@@ -215,6 +226,26 @@ private:
     Glide glide_tab_, glide_row_;
     bool gliding_ = false;            // one of them is moving (this picture)
     void glide(Glide& g, long key, int y, int h, int& gy, int& gh);
+    // RESTART THE GAME?: leaving the settings with something changed that only
+    // applies on the next start (ANTI-ALIASING): RESTART NOW, or LATER (back as usual)
+    bool restart_open_ = false;
+    int restart_button_ = 0;   // 0 RESTART NOW, 1 LATER
+    RECT restart_buttons_[2]{};
+    std::wstring restart_list() const;   // what waits for a restart, "" nothing
+    void restart_choose(int button);
+    void draw_restart();
+    // RESOLUTION's list: Enter or a click opens it over the description panel
+    bool drop_open_ = false;
+    int drop_sel_ = 0, drop_top_ = 0;     // the highlighted one, the first shown (resolutions, largest first)
+    std::vector<RECT> drop_rects_;
+    RECT panel_rect_{};                   // the settings page's description panel (draw_options_page)
+    // The entry of `resolutions` RESOLUTION stands on: the chosen mode (never
+    // the window's measured inside), else the nearest to what is in use
+    int resolution_index() const;
+    void open_drop();
+    void drop_pick(int i);
+    bool drop_key(int vk);
+    void draw_drop();
     // UPDATE AVAILABLE: the window over the main menu with the entries of
     // news.txt this version lacks. UPDATE NOW starts update.bat (it waits for the game to close,
     // updates, rebuilds and starts it again) and closes the game; LATER (Esc)

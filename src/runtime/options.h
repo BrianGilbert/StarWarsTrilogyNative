@@ -17,6 +17,7 @@ struct Options {
     bool headless = false;           // --headless: no window, full speed, report at the end
     bool menu = true;                // the main menu and save/settings.ini; off in test runs
     bool show_boot = false;          // --boot: the power-on screens before the SEGA logo
+    bool trigger_rumble = true;      // --no-trigger-rumble: Xbox pads through XInput (no motors in the triggers)
     // Picture
     float supersample = 1.0f;        // --scale: internal 3D resolution factor
     int msaa = 4;                    // --msaa: samples per pixel (1 = off)
