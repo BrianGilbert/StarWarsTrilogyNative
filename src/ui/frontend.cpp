@@ -452,7 +452,7 @@ std::vector<Frontend::Item> Frontend::items() const {
     }
     case Screen::Options: {
         std::wstring aa_hint = settings.aa != aa_at_launch
-                                   ? L"Edge smoothing.  Takes effect the next time the game starts"
+                                   ? L"Edge smoothing.  Applies after a restart (offered when you leave the settings)"
                                    :
 #ifdef __APPLE__
                                      L"Edge smoothing (MSAA 4x, 8x or off).  Applies on the next start";
@@ -644,7 +644,7 @@ void Frontend::open(Screen s) {
     screen_ = s;
     bool page = s == Screen::Options || s == Screen::Records;
     if (page) tab_ = 0;   // the first section
-    drop_open_ = false;
+    drop_open_ = restart_open_ = false;
     selected_ = page ? 1 : 0;   // the settings page and the records: their first row (the sections are not one)
     scroll_ = 0;
     hovered_ = -1;
@@ -786,6 +786,12 @@ void Frontend::back() {
     switch (screen_) {
     case Screen::Play: open(Screen::Main); break;
     case Screen::Options:
+        if (!restart_open_ && !restart_list().empty()) {   // RESTART THE GAME? first (LATER: back as here)
+            restart_open_ = true;
+            restart_button_ = 0;
+            dirty_ = true;
+            return;
+        }
         open(options_from_pause_ ? Screen::Pause : Screen::Main);
         selected_ = options_from_pause_ ? 1 : index_of(OPTIONS);   // where the options were opened from
         break;
@@ -816,6 +822,14 @@ bool Frontend::key(int vk) {
     if (starting) return true;   // nothing to choose while the game starts
     if (news_open_ && screen_ == Screen::Main) return news_key(vk);
     if (drop_open_) return drop_key(vk);
+    if (restart_open_) {
+        switch (vk) {
+        case VK_LEFT: case 'A': case VK_RIGHT: case 'D': case VK_TAB: restart_button_ ^= 1; dirty_ = true; break;
+        case VK_RETURN: case VK_SPACE: restart_choose(restart_button_); break;
+        case VK_ESCAPE: case VK_BACK: restart_choose(1); break;   // LATER
+        }
+        return true;
+    }
     auto list = items();
     int n = int(list.size());
     if (screen_ == Screen::Options && (vk == VK_RETURN || vk == VK_SPACE) && selected_ > 0 && selected_ < n &&
@@ -1058,6 +1072,11 @@ void Frontend::mouse_move(int x, int y) {
         if (hot >= 0) news_button_ = hot;
         return;
     }
+    if (restart_open_) {   // the button under the pointer
+        for (int b = 0; b < 2; b++)
+            if (PtInRect(&restart_buttons_[b], POINT{x, y}) && b != restart_button_) restart_button_ = b, dirty_ = true;
+        return;
+    }
     if (drop_open_) {   // the list's entry under the pointer
         for (int k = 0; k < int(drop_rects_.size()); k++)
             if (PtInRect(&drop_rects_[k], POINT{x, y}) && drop_top_ + k != drop_sel_) drop_sel_ = drop_top_ + k, dirty_ = true;
@@ -1082,6 +1101,11 @@ void Frontend::click(int x, int y) {
     if (news_open_ && screen_ == Screen::Main) {
         for (int b = 0; b < 2; b++)
             if (PtInRect(&news_buttons_[b], p)) news_choose(b);
+        return;
+    }
+    if (restart_open_) {   // only its two buttons
+        for (int b = 0; b < 2; b++)
+            if (PtInRect(&restart_buttons_[b], p)) restart_choose(b);
         return;
     }
     if (drop_open_) {   // a resolution, or away from the list: closed
@@ -1120,7 +1144,7 @@ void Frontend::click(int x, int y) {
 }
 
 void Frontend::wheel(int x, int y, int delta) {
-    if (starting || screen_ == Screen::Splash || (news_open_ && screen_ == Screen::Main)) return;
+    if (starting || screen_ == Screen::Splash || (news_open_ && screen_ == Screen::Main) || restart_open_) return;
     if (drop_open_) {
         drop_key(delta > 0 ? VK_UP : VK_DOWN);
         return;
@@ -2044,6 +2068,59 @@ void Frontend::draw_options_page(const std::vector<Item>& list, bool over_game) 
     for (const Key& k : keys) prompt(kx, h - U(38) - kh / 2, kh, k.pad, k.key, k.what);
 }
 
+// ---- RESTART THE GAME? ----
+
+std::wstring Frontend::restart_list() const {
+#ifdef __APPLE__
+    static const wchar_t* const AA_NAMES[3] = {L"MSAA 4X", L"MSAA 8X", L"OFF"};
+#else
+    static const wchar_t* const AA_NAMES[3] = {L"MSAA 4X", L"DLAA", L"OFF"};
+#endif
+    if (settings.aa != aa_at_launch) return std::wstring(L"ANTI-ALIASING ") + AA_NAMES[std::clamp(settings.aa, 0, 2)];
+    return L"";
+}
+
+void Frontend::restart_choose(int button) {
+    dirty_ = true;
+    if (button == 0) {   // RESTART NOW: app.cpp saves, closes and starts the game again
+        restart_open_ = false;
+        push(Action::Restart);
+        return;
+    }
+    back();   // LATER: on, as BACK (the prompt is not asked again)
+}
+
+void Frontend::draw_restart() {
+    auto U = [&](float v) { return int(v * u_ + 0.5f); };
+    const int w = w_, h = h_;
+    fill(0, 0, w, h, 0x000000, 0.55f);
+    int pw = std::min(U(900), w - U(80)), ph = U(over_game() ? 360.0f : 320.0f);
+    int x0 = (w - pw) / 2, y0 = (h - ph) / 2, x1 = x0 + pw, y1 = y0 + ph, cx = w / 2;
+    fill(x0, y0, x1, y1, PANEL, 1);
+    frame(x0, y0, x1, y1, std::max(1, U(1)), PAGE_LINE, 1);
+    fill(x0, y0, x1, y0 + std::max(2, U(4)), SABER, 1);
+    text(TITLE, U(52), L"RESTART THE GAME?", cx, y0 + U(30), 1, {0xFFFFFF, 0xE2EAF4, 0, 0, 1, U(3)});
+    int y = y0 + U(104);
+    std::wstring list = restart_list();
+    for (const std::wstring& line : wrap(BODY, U(26), list + (list.find(L" and ") != std::wstring::npos ? L" need a restart" : L" needs a restart"),
+                                         pw - U(80))) {
+        text(BODY, U(26), line, cx, y, 1, {GOLD_TOP, GOLD_BOTTOM});
+        y += U(36);
+    }
+    if (over_game()) text(BODY, U(22), L"The game in progress will be lost.  LATER keeps it", cx, y + U(4), 1, {0xFF9A8E, 0xFF9A8E});
+    static const wchar_t* const NAMES[2] = {L"RESTART NOW", L"LATER"};
+    int bw = U(280), bh = U(64), gap = U(40), bx = cx - bw - gap / 2, by = y1 - U(36) - bh;
+    for (int b = 0; b < 2; b++) {
+        int x = bx + b * (bw + gap);
+        bool sel = b == restart_button_;
+        if (sel) page_band(x + U(13), by, x + bw, by + bh, 0.5f, 0.2f, 1);
+        else frame(x, by, x + bw, by + bh, std::max(1, U(1)), PAGE_LINE, 1);
+        text(TITLE, U(38), NAMES[b], x + bw / 2, by + bh / 2 - U(38) * 75 / 100, 1,
+             sel ? Style{GOLD_TOP, GOLD_BOTTOM, 0, 0, 1, U(2)} : Style{PAGE_TEXT, PAGE_TEXT, 0, 0, 1, U(2)});
+        restart_buttons_[b] = {x, by, x + bw, by + bh};
+    }
+}
+
 // ---- RESOLUTION's list ----
 
 int Frontend::resolution_index() const {
@@ -2305,6 +2382,7 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
     if (page) {   // the settings page (and the records in its look)
         draw_options_page(list, over_game);
         if (drop_open_) draw_drop();
+        if (restart_open_) draw_restart();
         dirty_ = gliding_;   // a band gliding: drawn again every refresh
         fade_in();
         return true;

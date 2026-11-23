@@ -54,6 +54,8 @@
 #include "../video/ui_overlay.h"
 #include "../video/vk_presenter.h"
 #ifndef _WIN32
+#include <unistd.h>   // execv (RESTART NOW)
+
 #include "../platform/mac/platform_mac.h"
 #endif
 #include "app_internal.h"
@@ -571,7 +573,7 @@ int main(int argc, char** argv) {
             s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
         }
         // the logo first (not when a debugging aid drives the menu)
-        if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT")) frontend.open(Frontend::Screen::Main);
+        if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT") || getenv("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
         else {
             frontend.open_splash();
             frontend.check_for_news();   // news.txt on GitHub while the logo plays
@@ -627,6 +629,7 @@ int main(int argc, char** argv) {
     int arcade_join = kAnalogJoystick && g_opt.menu ? 1 : 0;
     bool arcade_entered = false;
     bool play_waits = false;   // PLAY pressed while the game still gets to the mission select
+    bool restart = false;      // RESTART NOW: the game starts again once this one has closed
 
     // Achievement notices, over the game and under the menus
     AchievementToast toast;
@@ -1018,6 +1021,11 @@ int main(int argc, char** argv) {
                     frontend.open(Frontend::Screen::Main);
                     break;
                 case Frontend::Action::Quit: presenter.close(); break;
+                case Frontend::Action::Restart:   // RESTART NOW: saved, closed as on QUIT, started again (end of main)
+                    s.save("save/settings.ini");
+                    restart = true;
+                    presenter.close();
+                    break;
                 case Frontend::Action::DisplayChanged:   // MODE, RESOLUTION: at once
                     presenter.set_mode(s.display_mode, s.res_w, s.res_h);
                     s.display_mode = presenter.mode();   // (a FULLSCREEN the monitor refused: BORDERLESS)
@@ -1495,5 +1503,28 @@ int main(int argc, char** argv) {
     renderer.shutdown();
     presenter.shutdown();
     g_pads.shutdown();
+    if (restart) {   // RESTART NOW: the same program, command line and folder, straight to the main menu
+        printf("[menu] restarting\n");
+        fflush(stdout);
+#ifdef _WIN32
+        SetEnvironmentVariableA("SWT_RESTARTED", "1");
+        wchar_t exe[MAX_PATH];
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        std::wstring cmd = GetCommandLineW();
+        STARTUPINFOW si{sizeof(si)};
+        PROCESS_INFORMATION pi{};
+        if (CreateProcessW(exe, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        } else {
+            printf("[menu] could not start the game again (%lu)\n", GetLastError());
+        }
+#else
+        setenv("SWT_RESTARTED", "1", 1);
+        std::string exe = mac_exe_path();
+        execv(exe.c_str(), argv);   // (returns only if it failed)
+        printf("[menu] could not start the game again\n");
+#endif
+    }
     ExitProcess(0);
 }

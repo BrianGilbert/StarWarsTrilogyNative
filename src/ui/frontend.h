@@ -78,9 +78,10 @@ struct FrontendSettings {
 class Frontend {
 public:
     enum class Screen { None, Splash, Main, Play, Options, Pause, Records, Debug };
-    // DisplayChanged: MODE or RESOLUTION, applied to the window at once
+    // DisplayChanged: MODE or RESOLUTION, applied to the window at once.
+    // Restart: RESTART NOW (app.cpp saves, closes and starts the game again)
     enum class Action { None, StartArcade, Resume, Quit, DisplayChanged, SettingsChanged,
-                        QuitToMenu, StartDebug };
+                        QuitToMenu, StartDebug, Restart };
 
     bool init(const std::string& font_dir);
     void shutdown();
@@ -224,6 +225,14 @@ private:
     Glide glide_tab_, glide_row_;
     bool gliding_ = false;            // one of them is moving (this picture)
     void glide(Glide& g, long key, int y, int h, int& gy, int& gh);
+    // RESTART THE GAME?: leaving the settings with something changed that only
+    // applies on the next start (ANTI-ALIASING): RESTART NOW, or LATER (back as usual)
+    bool restart_open_ = false;
+    int restart_button_ = 0;   // 0 RESTART NOW, 1 LATER
+    RECT restart_buttons_[2]{};
+    std::wstring restart_list() const;   // what waits for a restart, "" nothing
+    void restart_choose(int button);
+    void draw_restart();
     // RESOLUTION's list: Enter or a click opens it over the description panel
     bool drop_open_ = false;
     int drop_sel_ = 0, drop_top_ = 0;     // the highlighted one, the first shown (resolutions, largest first)
