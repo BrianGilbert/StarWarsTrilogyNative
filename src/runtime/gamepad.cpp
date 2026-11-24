@@ -332,9 +332,9 @@ void Gamepads::poll(const GamepadSettings& set, bool focused, bool menu) {
                     float sx = float(SDL_GetGamepadAxis(p, axx)) / 32767.0f, sy = float(SDL_GetGamepadAxis(p, axy)) / 32767.0f;
                     float m = std::sqrt(sx * sx + sy * sy);
                     if (m < STICK_DEAD) continue;
-                    float t = std::min((m - STICK_DEAD) / (0.95f - STICK_DEAD), 1.0f);   // full a little before the edge
-                    t *= 0.2f + 0.8f * t;   // gentle near the centre, still the whole travel at the edge
-                    lvx += sx / m * t * inv_x, lvy += sy / m * t * inv_y;
+                    float amount = std::min((m - STICK_DEAD) / (0.95f - STICK_DEAD), 1.0f);   // full a little before the edge
+                    amount *= 0.2f + 0.8f * amount;   // gentle near the centre, still the whole travel at the edge
+                    lvx += sx / m * amount * inv_x, lvy += sy / m * amount * inv_y;
                 }
                 // A real lever takes a moment to swing over: the position follows
                 // the stick at most LEVER_SPEED per second (centre to side in 1/6 s
