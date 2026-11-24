@@ -87,9 +87,6 @@ LRESULT CALLBACK VkPresenter::wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
     }
     switch (msg) {
-    case WM_INPUT:
-        if (self && self->raw_input) self->raw_input(reinterpret_cast<HRAWINPUT>(lp));
-        break;   // DefWindowProc cleans up after it
     case WM_CLOSE:
         if (self) self->quit_ = true;
         return 0;
@@ -104,7 +101,7 @@ LRESULT CALLBACK VkPresenter::wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == VK_F11 && self) self->toggle_fullscreen();
         return 0;
     case WM_SETCURSOR:
-        if (LOWORD(lp) == HTCLIENT) {   // the renderer draws its own crosshair (menus use the arrow)
+        if (LOWORD(lp) == HTCLIENT) {   // no pointer over the game (the game draws its sight; menus use the arrow)
             SetCursor(self && self->show_cursor_ ? LoadCursor(nullptr, IDC_ARROW) : nullptr);
             return TRUE;
         }

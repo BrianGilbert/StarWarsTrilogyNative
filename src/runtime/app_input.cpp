@@ -14,7 +14,7 @@
 #include "gamepad.h"
 #include "inputs.h"
 #include "options.h"
-#include "raw_mice.h"
+#include "mouse_confine.h"
 #include "runtime.h"
 #include "../video/r3d_renderer.h"
 #include "../video/r3d_scene.h"
@@ -23,8 +23,8 @@
 #include "app_internal.h"
 
 // Keyboard and mouse (only while the window is active):
-//   5 = coin, 1 = start, mouse = gun (left button fires, right reloads),
-//   6 / 2 = player 2's coin and start, F2 = test, F3 = service
+//   5 = coin, 1 = start, mouse = the lever (left button fires, right is the
+//   second trigger), 6 / 2 = the second coin slot and start, F2 = test, F3 = service
 bool g_menu_open = false;     // a menu has the controls
 bool g_block_buttons = false; // after a menu closes: buttons ignored until released
 static int g_p1_pad = -1;            // the gamepad aiming for player 1; -1: the mouse (whichever moved last)
@@ -34,25 +34,24 @@ static const bool g_narrow_aim = getenv("SWT_NARROW_AIM") != nullptr;   // the l
 void pointer_sight(float gx, float gy, float& fx, float& fy);
 
 // Window pixels -> fraction of the 4:3 game screen (accounting for the black bars)
-static void aim_at(int player, HWND hwnd, POINT pt) {
+static void aim_at(HWND hwnd, POINT pt) {
     RECT rc;
     GetClientRect(hwnd, &rc);
-    // The gun covers the original 4:3 area, centred in the (possibly wider) 3D view
     ScreenLayout lay = compute_layout(float(rc.right), float(rc.bottom), g_opt.max_aspect);
-    if (kAnalogJoystick && player == 0 && g_pointer_sight && !g_narrow_aim) {
+    if (g_pointer_sight && !g_narrow_aim) {
         // The lever is set so that the game's sight lands under the pointer
         // (a light gun such as a Sinden shoots where it points)
         float fx, fy;
         pointer_sight((pt.x - lay.ox) / lay.scale - lay.game_x0, (pt.y - lay.oy) / lay.scale, fx, fy);
-        set_player_aim(player, fx, fy);
+        set_player_aim(0, fx, fy);
         return;
     }
-    float x = (pt.x - lay.ox - lay.game_x0 * lay.scale) / (SCREEN_W * lay.scale);
-    // Star Wars Trilogy's lever: its whole travel spans the whole (wider) view
-    // once the sight's yaw is widened (rt_aim_yaw)
-    if (kAnalogJoystick && !g_narrow_aim) x = (pt.x - lay.ox) / (lay.view_w * lay.scale);
+    // The lever's whole travel spans the whole (wider) view once the sight's
+    // yaw is widened (rt_aim_yaw); SWT_NARROW_AIM: the original 4:3 area only
+    float x = g_narrow_aim ? (pt.x - lay.ox - lay.game_x0 * lay.scale) / (SCREEN_W * lay.scale)
+                           : (pt.x - lay.ox) / (lay.view_w * lay.scale);
     float y = (pt.y - lay.oy) / (SCREEN_H * lay.scale);
-    set_player_aim(player, x, y);
+    set_player_aim(0, x, y);
 }
 
 void poll_keyboard_mouse(HWND hwnd) {
@@ -60,13 +59,10 @@ void poll_keyboard_mouse(HWND hwnd) {
     if (GetForegroundWindow() != hwnd || !g_auto.events.empty() || g_arcade_entry) {
         if (g_auto.events.empty() && !g_arcade_entry)   // in the background: no gun stays held
             for (PlayerInputs& pl : g_inputs.p) pl.trigger = pl.offscreen = pl.event = false;
-        raw_mice::update(hwnd, false, false);
+        mouse_confine::update(hwnd, false);
         return;
     }
-    // A second mouse becomes player 2's when it clicks while player 1 plays alone
-    bool join_allowed = g_opt.several_mice && !g_menu_open && g_inputs.p[0].playing && !g_inputs.p[1].playing;
-    raw_mice::confine(kAnalogJoystick && g_pointer_sight && g_p1_pad < 0);
-    raw_mice::update(hwnd, join_allowed, !g_menu_open);
+    mouse_confine::update(hwnd, g_pointer_sight && g_p1_pad < 0 && !g_menu_open);
     auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
     if (g_menu_open) {
         g_inputs.test = g_inputs.service = false;
@@ -85,43 +81,26 @@ void poll_keyboard_mouse(HWND hwnd) {
     static POINT last_cursor{-100000, -100000};
     if (cursor.x != last_cursor.x || cursor.y != last_cursor.y) g_p1_pad = -1;   // the mouse moved: it aims again
     last_cursor = cursor;
-    if (raw_mice::two_mice()) {   // each mouse its own gun; player 2's click joins while player 1 plays
-        for (int p = 0; p < 2; p++) {
-            raw_mice::Gun g = raw_mice::gun(p, hwnd);
-            PlayerInputs& pl = g_inputs.p[p];
-            if (p == 1 && g.clicked && !pl.playing && p1.playing) player_join(1);
-            pl.trigger = g.trigger;
-            pl.offscreen = g.reload;
-            if (p == 1 || g_p1_pad < 0) aim_at(p, hwnd, g.pos);
-        }
-    } else {
-        p1.trigger = down(VK_LBUTTON);
-        p1.offscreen = down(VK_RBUTTON);
-        g_inputs.p[1].trigger = g_inputs.p[1].offscreen = false;   // player 2's pad adds its buttons after this
-        POINT pt;
-        GetCursorPos(&pt);
-        ScreenToClient(hwnd, &pt);
-        if (g_p1_pad < 0) aim_at(0, hwnd, pt);
-    }
+    p1.trigger = down(VK_LBUTTON);
+    p1.offscreen = down(VK_RBUTTON);
+    g_inputs.p[1].trigger = g_inputs.p[1].offscreen = false;   // a second pad adds its buttons after this
+    POINT pt;
+    GetCursorPos(&pt);
+    ScreenToClient(hwnd, &pt);
+    if (g_p1_pad < 0) aim_at(hwnd, pt);
     // Arrow keys: the lever at full tilt; Space / Ctrl are the triggers, E or
     // the middle mouse button the EVENT button
-    if (kAnalogJoystick) {
-        p1.event = down('E') || down(VK_MBUTTON);
-        int kx = down(VK_RIGHT) - down(VK_LEFT), ky = down(VK_DOWN) - down(VK_UP);
-        if (kx || ky) set_player_aim(0, 0.5f + 0.5f * kx, 0.5f + 0.5f * ky);
-        if (down(VK_SPACE)) p1.trigger = true;
-        if (down(VK_CONTROL)) p1.offscreen = true;
-    }
+    p1.event = down('E') || down(VK_MBUTTON);
+    int kx = down(VK_RIGHT) - down(VK_LEFT), ky = down(VK_DOWN) - down(VK_UP);
+    if (kx || ky) set_player_aim(0, 0.5f + 0.5f * kx, 0.5f + 0.5f * ky);
+    if (down(VK_SPACE)) p1.trigger = true;
+    if (down(VK_CONTROL)) p1.offscreen = true;
     if (g_block_buttons) {   // the click that closed the menu does not fire
         bool held = false;
         for (PlayerInputs& pl : g_inputs.p) held |= pl.trigger || pl.offscreen;
         if (held) for (PlayerInputs& pl : g_inputs.p) pl.trigger = pl.offscreen = pl.event = false;
         else g_block_buttons = false;
     }
-    static bool c_was_down = false;   // C toggles the extra crosshair
-    bool c_down = down('C');
-    if (c_down && !c_was_down) g_opt.show_crosshair = !g_opt.show_crosshair;
-    c_was_down = c_down;
 }
 
 // Gamepads (gamepad.h), after the keyboard and mouse: their buttons are added

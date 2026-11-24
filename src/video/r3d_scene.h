@@ -134,11 +134,6 @@ public:
     const std::vector<std::vector<R3DInstance>>& instances() const { return viewport_instances_; }
     // Removes the black cinematic bars the game draws over the scene
     void set_remove_letterbox(bool remove) { remove_letterbox_ = remove; }
-    // Marks the 3D HUD elements at the sides of the screen (ammo) so the
-    // renderer can move them to the edges of a widescreen window
-    void set_hud_edges(bool edges) { hud_edges_ = edges; }
-    // Star Wars Trilogy: the world's lighting for every viewport drawn with its camera (r3d_share_world)
-    void set_share_world(bool on) { share_world_ = on; }
     // The last build's stages in ms (LW_FRAMELOG): the nodes and models, the
     // world tracking, the screen heuristics, the texture pack, the previous frame's pairing
     const float* stage_ms() const { return stage_ms_; }
@@ -224,8 +219,6 @@ private:
     std::unordered_set<uint32_t> spinning_;   // instances that turned a lot since the previous frame
     std::unordered_map<uint32_t, uint32_t> instance_count_;
     uint32_t node_key_ = 0, viewport_key_ = 0;
-    bool hud_edges_ = true;
-    bool share_world_ = false;
     bool procedural_sky_ = false;
     float fov_widened_ = 1.0f;
     float view_wide_ = 1.0f;

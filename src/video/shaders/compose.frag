@@ -9,8 +9,7 @@
 #define NONUNIFORM(i) nonuniformEXT(i)
 #endif
 // Final composition: background 2D layers, 3D image and foreground 2D layers,
-// with black bars to preserve the Model 3 aspect ratio, plus an optional
-// high-visibility crosshair drawn at the real mouse position.
+// with black bars to preserve the Model 3 aspect ratio.
 // The 2D layers are upscaled with xBR (Hyllian's xBR-lv2), which rebuilds
 // smooth edges from the pixel art instead of blurring or blocking it.
 layout(location = 0) in vec2 uv;
@@ -40,7 +39,7 @@ layout(set = 0, binding = 13) uniform sampler2D bloom_tight;   // the same glow,
 layout(push_constant) uniform Compose {
     vec2 scale;       // image size relative to the window
     vec2 offset;      // top-left corner
-    vec2 crosshair;   // position in window pixels; negative = hidden
+    vec2 finish;      // x: sharpening (0 = off); y: 1 = space (full glow)
     vec2 window;      // window size in pixels
     vec2 layer2d;     // x offset and width of the 4:3 2D area inside the 3D view
     vec2 filter2d;    // x: 1 = xBR, 0 = plain pixels; y: window pixels per 2D pixel
@@ -57,35 +56,12 @@ layout(push_constant) uniform Compose {
     vec4 motion;      // x: interpolation of the back layers: the fraction of each row's scroll
                       // since the previous game frame (in sky_coords) to draw them back by;
                       // y: cinematic grade of space scenes (0 = off, 1 = full);
-                      // z: 1 = Star Wars Trilogy's HUD bands (score / level on top, dialogue / shield below);
-                      // w: 1 = FXAA on the 3D image
-    vec4 crosshair2;  // xy: player 2's crosshair, like crosshair; z: sharpening (0 = off); w: 1 = space (full glow)
+                      // z: free; w: 1 = FXAA on the 3D image
 } pc;
-
-// Rows of the 2D screen holding the score (rows 9-30); in widescreen its left
-// half moves to the left edge and its right half to the right edge. The points
-// won ("200") appear from row 33 down and stay where the game puts them.
-const float HUD_TOP_ROWS = 32.0;
 
 const ivec2 SIZE_2D = ivec2(496, 384);
 const int BACK_MARGIN = 200;   // tilegen.h: the back layers extend beyond both sides
 const ivec2 SIZE_BACK = ivec2(496 + 2 * BACK_MARGIN, 384);
-
-// Crosshair: ring and cross with a dark outline so it reads on any background;
-// player 1's yellow, player 2's cyan
-vec4 crosshair(vec2 frag, vec2 at, vec3 tint) {
-    vec2 d = frag - at;
-    float size = max(10.0, pc.window.y / 60.0);
-    float r = length(d);
-    float ring = abs(r - size);
-    float cross = min(abs(d.x), abs(d.y));
-    bool in_cross = max(abs(d.x), abs(d.y)) < size * 1.6 && r > size * 0.35;
-    float core = min(ring, in_cross ? cross : 1e9);
-    if (core < 1.2) return vec4(tint, 1.0);
-    if (core < 3.0) return vec4(0.0, 0.0, 0.0, 0.85);   // outline
-    if (r < 1.8) return vec4(tint, 1.0);                // centre dot
-    return vec4(0.0);
-}
 
 // ---- xBR-lv2 ---------------------------------------------------------------
 
@@ -603,11 +579,10 @@ void main() {
         // With DLAA the alpha comes from its own anti-aliasing pass, steady
         // from frame to frame like the colour
         s.a = texture(scene3d_alpha, pf).r;
-        // Star Wars Trilogy: the cracks between the modules its scenery is
-        // built of (Hoth's base) let the black backdrop through as thin
-        // flickering lines; a gap of up to 3 pixels with the 3D image on both
-        // sides is filled from them
-        if (pc.motion.z > 0.5 && s.a < 0.99) {
+        // The cracks between the modules the scenery is built of (Hoth's
+        // base) let the black backdrop through as thin flickering lines; a
+        // gap of up to 3 pixels with the 3D image on both sides is filled from them
+        if (s.a < 0.99) {
             vec2 t = 1.0 / vec2(textureSize(scene3d, 0));
             for (int k = 1; k <= 3; k++) {
                 vec2 dx = vec2(t.x * float(k), 0.0), dy = vec2(0.0, t.y * float(k));
@@ -623,13 +598,13 @@ void main() {
         // Sharpening (SHARPEN), contrast adaptive like AMD's CAS: detail comes
         // back after the anti-aliasing and the diffusion, flat areas and
         // strong edges are left alone (no halos); not on the edges FXAA smoothed
-        if (pc.crosshair2.z > 0.0 && s.a > 0.0 && pf == p) {
+        if (pc.finish.x > 0.0 && s.a > 0.0 && pf == p) {
             vec2 t = 1.0 / vec2(textureSize(scene3d, 0));
             vec3 a = texture(scene3d, p - vec2(0.0, t.y)).rgb, b = texture(scene3d, p - vec2(t.x, 0.0)).rgb;
             vec3 d = texture(scene3d, p + vec2(t.x, 0.0)).rgb, e = texture(scene3d, p + vec2(0.0, t.y)).rgb;
             vec3 lo = min(s.rgb, min(min(a, b), min(d, e))), hi = max(s.rgb, max(max(a, b), max(d, e)));
             vec3 amp = sqrt(clamp(min(lo, 1.0 - hi) / max(hi, vec3(1e-4)), 0.0, 1.0));
-            vec3 w = -amp * mix(0.125, 0.2, pc.crosshair2.z);
+            vec3 w = -amp * mix(0.125, 0.2, pc.finish.x);
             s.rgb = max((a + b + d + e) * w + s.rgb, 0.0) / (1.0 + 4.0 * w);
         }
         if (pc.hud.y > 0.5 && s.a > 0.0) {   // HDR lighting: exposure and tone curve (premultiplied)
@@ -678,9 +653,9 @@ void main() {
         // Where the foreground's replacement pictures are looked up (2D pixels):
         // moved with the HUD like the foreground itself (-1: none there)
         vec2 pic_pos = vec2((p.x - pc.layer2d.x) / pc.layer2d.y * 496.0, p.y * 384.0);
-        if (shift > 0.0 && pc.motion.z > 0.5) {
-            // Star Wars Trilogy: on top the score goes to the left edge and the
-            // level to the right one; below, the dialogue box (and the credits)
+        if (shift > 0.0) {
+            // On top the score goes to the left edge and the level to the
+            // right one; below, the dialogue box (and the credits)
             // to the left and the shield to the right, 24 rows lower (its 3D
             // ring too: R3D_HUD_LOWER). The blaster's OVERHEAT gauge (a column
             // left of x 48, rows 52 to 340, on foot) goes to the left edge too
@@ -706,15 +681,6 @@ void main() {
                 front = vec4(0.0);
                 pic_pos = vec2(-1.0);
             }
-        } else if (shift > 0.0 && pc.motion.z < 0.5 && row < HUD_TOP_ROWS) {
-            float x = (p.x - pc.layer2d.x) / pc.layer2d.y * 496.0;
-            float from_left = x + shift, from_right = x - shift;
-            if (from_left < 248.0)
-                front = front_layer(vec2(max(from_left, 0.5) / 496.0, q.y));
-            else if (from_right >= 248.0)
-                front = front_layer(vec2(min(from_right, 495.5) / 496.0, q.y));
-            else
-                front = vec4(0.0);
         } else {
             front = front_layer(q);
         }
@@ -785,7 +751,7 @@ void main() {
             // and only a bright scene loses the part its surroundings share
             // Only space gets it in full: a dark tunnel on the ground (Hoth's
             // ice caves) would blow its bright exit up into a blocky white blob
-            float dark = max(0.35 * (1.0 - smoothstep(0.04, 0.25, average)), pc.crosshair2.w);
+            float dark = max(0.35 * (1.0 - smoothstep(0.04, 0.25, average)), pc.finish.y);
             vec3 around = texture(diffusion, p).rgb * (1.0 - dark);
             vec3 cut = vec3(0.5 * average) + 0.7 * around;
             vec3 wide = max(texture(bloom, p).rgb - cut, vec3(0.0));
@@ -832,13 +798,5 @@ void main() {
     float luma = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = clamp(mix(vec3(luma), c, pc.effects.y), 0.0, 1.0);
     c = pow(c, vec3(1.0 / pc.effects.z));
-    if (pc.crosshair2.x >= 0.0) {
-        vec4 x = crosshair(uv * pc.window, pc.crosshair2.xy, vec3(0.2, 0.9, 1.0));
-        c = mix(c, x.rgb, x.a);
-    }
-    if (pc.crosshair.x >= 0.0) {
-        vec4 x = crosshair(uv * pc.window, pc.crosshair, vec3(1.0, 0.95, 0.2));
-        c = mix(c, x.rgb, x.a);
-    }
     color = vec4(c, 1.0);
 }

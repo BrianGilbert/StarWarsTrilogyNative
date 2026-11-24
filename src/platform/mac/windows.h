@@ -27,7 +27,6 @@ typedef void* HFONT;
 typedef void* HBITMAP;
 typedef void* HDC;
 typedef struct HWND__* HWND;
-typedef struct HRAWINPUT__* HRAWINPUT;
 typedef const wchar_t* LPCWSTR;
 
 #define WINAPI

@@ -27,7 +27,6 @@
 #include "inputs.h"
 #include "options.h"
 #include "ppc_rt.h"
-#include "raw_mice.h"
 #include "rom_zip.h"
 #include "runtime.h"
 #include "stats.h"

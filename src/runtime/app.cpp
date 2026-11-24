@@ -33,7 +33,6 @@
 #include "inputs.h"
 #include "options.h"
 #include "ppc_rt.h"
-#include "raw_mice.h"
 #include "rom_zip.h"
 #include "runtime.h"
 #include "stats.h"
@@ -62,16 +61,6 @@
 #include "settings_bridge.h"
 
 Options g_opt;   // command line and menu settings (options.h)
-
-// The stage select screen marks the gun with a small textured dot in its top
-// viewport; in a stage the game draws an untextured X instead
-static bool select_dot_on_screen(const R3DScene& scene) {
-    if (scene.viewports.empty()) return false;
-    const R3DViewport& v = scene.viewports.back();   // highest priority
-    for (uint32_t i = 0; i < v.trans_count; i++)
-        if (scene.vertices[v.trans_first + i].tex == 0x625A0340) return true;
-    return false;
-}
 
 // When the image being recorded will be on screen: with vsync the images go
 // out once per refresh, evenly, while this thread wakes up for them at uneven
@@ -385,7 +374,6 @@ int main(int argc, char** argv) {
     renderer.set_max_aspect(g_opt.max_aspect);
     renderer.set_smooth_2d(!g_opt.pixel_2d);
     renderer.set_hud_edges(!g_opt.hud_centre);
-    renderer.set_swt_hud(kAnalogJoystick);
     renderer.set_distance_haze(g_opt.haze);
     renderer.set_bloom(g_opt.bloom);
     renderer.set_picture(g_opt.saturation, g_opt.gamma);
@@ -402,7 +390,7 @@ int main(int argc, char** argv) {
     // Star Wars Trilogy's worlds are far bigger in its units than Lost World's
     // (the ships in space hundreds to thousands away, Hoth's walkers hundreds):
     // the surface detail reaches that far (a duel is a few units across)
-    if (kAnalogJoystick && getenv("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
+    if (getenv("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
     renderer.set_sharpen(g_opt.sharpen ? 0.5f : 0.0f);
     if (g_opt.haze > 0) printf("[video] distance haze on (strength %.2f)\n", g_opt.haze);
     if (dlss_failed) printf("[video] DLAA/DLSS not available on %s: using FXAA\n", presenter.device_name().c_str());
@@ -426,12 +414,6 @@ int main(int argc, char** argv) {
     }
     R3DSceneBuilder builder;
     builder.set_remove_letterbox(!g_opt.letterbox);
-    // Lost World's ammo counter is 3D geometry at the sides of an overlay
-    // viewport, moved to the window edges in widescreen. Star Wars Trilogy
-    // draws its whole world in such a viewport (the stars are the one below
-    // it), so that would move pieces of planets and ships out of place
-    builder.set_hud_edges(false);
-    builder.set_share_world(true);
     builder.set_procedural_sky(g_opt.sky_procedural);
     TexturePack pack;
     pack.init("textures", g_opt.dump_textures ? "out/textures" : "");
@@ -539,8 +521,6 @@ int main(int argc, char** argv) {
     Frontend frontend;
     // The menus are being driven with a gamepad: no mouse pointer until the mouse moves
     bool pad_in_menu = false;
-    raw_mice::init(presenter.hwnd());   // a second mouse can be player 2's gun
-    presenter.raw_input = raw_mice::on_input;
     UiOverlay ui;
     std::vector<uint32_t> ui_pixels;
     float haze_strength = g_opt.haze > 0 ? g_opt.haze : 1;
@@ -667,7 +647,7 @@ int main(int argc, char** argv) {
 
     // PLAY: 1 = join once booted. Star Wars Trilogy goes to its mission select
     // already behind the menu, from the start, so PLAY shows it at once
-    int arcade_join = kAnalogJoystick && g_opt.menu && !g_opt.arcade ? 1 : 0;
+    int arcade_join = g_opt.menu && !g_opt.arcade ? 1 : 0;
     bool arcade_entered = false;
     bool play_waits = false;   // PLAY pressed while the game still gets to the mission select
     bool restart = false;      // RESTART NOW: the game starts again once this one has closed
@@ -872,7 +852,7 @@ int main(int argc, char** argv) {
                 builder.set_fov_widened(g_wide_applied);
                 builder.set_view_wide(g_opt.max_aspect > 4.0f / 3.0f + 0.01f ? std::max(1.0f, g_wide_view.load()) : 1.0f);
                 builder.build(*state, p->scene);
-                if (kAnalogJoystick) collect_scene_targets(builder, p->scene);
+                collect_scene_targets(builder, p->scene);
                 double built_at = qpc_seconds();
                 pictures.replacements = pack.take_new_images();
                 if (layers.valid()) layers.get();
@@ -979,17 +959,13 @@ int main(int argc, char** argv) {
         // it runs on with nothing on screen, through the SEGA logo (which
         // takes no coin), while the coin and START go in for the player
         // (runtime.cpp, arcade_entry_frame)
-        if (arcade_join && !g_boot_skip && (kAnalogJoystick || !g_menu_open)) {
+        if (arcade_join && !g_boot_skip) {
             arcade_join = 0;
-            if (kAnalogJoystick) {
-                arcade_entered = true;
-                g_arcade_entry = 1;
-                g_boot_skip = g_fast_idle = true;
-                g_sound.set_dsp_enabled(false);
-                g_sound.set_muted(true);
-            } else {
-                player_join(0);
-            }
+            arcade_entered = true;
+            g_arcade_entry = 1;
+            g_boot_skip = g_fast_idle = true;
+            g_sound.set_dsp_enabled(false);
+            g_sound.set_muted(true);
         }
         // A game over: the main menu, while the game goes on to the mission
         // select behind it instead of into the attract (runtime.cpp, attract_guard_frame)
@@ -1028,10 +1004,10 @@ int main(int argc, char** argv) {
                 FrontendSettings& s = frontend.settings;
                 switch (a) {
                 case Frontend::Action::StartArcade:
-                    if (!kAnalogJoystick || !arcade_entered) arcade_join = 1;
-                    // Star Wars Trilogy: the menu stays until the mission select is up
-                    // behind it (the game runs there unseen, at full speed)
-                    if (kAnalogJoystick && (arcade_join || g_arcade_entry || g_boot_skip)) {
+                    if (!arcade_entered) arcade_join = 1;
+                    // The menu stays until the mission select is up behind it
+                    // (the game runs there unseen, at full speed)
+                    if (arcade_join || g_arcade_entry || g_boot_skip) {
                         play_waits = true;
                         frontend.starting = true;
                         frontend.invalidate();
@@ -1042,7 +1018,6 @@ int main(int argc, char** argv) {
                     close_menu();
                     break;
                 case Frontend::Action::StartDebug:   // DEBUG: a phase of a stage (runtime.cpp, debug_jump_frame)
-                    if (!kAnalogJoystick) break;
                     g_debug_jump = frontend.debug_choice;
                     if (!arcade_entered) {
                         arcade_join = 1;
@@ -1267,11 +1242,6 @@ int main(int argc, char** argv) {
         }
         f9_was_down = f9;
         if (g_opt.shot_frame && shown != ~0ull && shown + 1 >= g_opt.shot_frame) capture_2d = true;
-        for (int p = 0; p < 2; p++) {   // player 2's only while that gun is in use
-            PlayerAim aim = player_aim(p);
-            bool used = p == 0 || g_inputs.p[1].playing;
-            renderer.set_crosshair(p, !kAnalogJoystick && g_opt.show_crosshair && used && aim.inside && !g_opt.fixed_aim, aim.x, aim.y);
-        }
         // The 3D frame to draw. While interpolating, the picture shows the game
         // as it was at `shown_time`: a frame period plus the frames' lateness
         // before this image's moment on screen, so the next frame is always
@@ -1365,7 +1335,6 @@ int main(int argc, char** argv) {
                 scene = &own_scene;
             }
             scene_seconds += qpc_seconds() - scene_from;
-            g_select_aim = select_dot_on_screen(*scene);
             built = latest;
             renderer.set_scene(scene);
             // Debugging aid: LW_SPOTLOG=path writes the world viewport's spotlight every game frame

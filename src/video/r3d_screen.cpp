@@ -27,30 +27,6 @@ static bool screen_bbox(const R3DViewport& v, const R3DVertex* tri, float* b) {
     return true;
 }
 
-// The ammo counter is 3D geometry in an overlay viewport, drawn inside the
-// left (or right) margin of the 4:3 screen. Those triangles are tagged so the
-// vertex shader moves them out to the edges of a widescreen view. The gun
-// sight lives in the same viewport but much closer to the camera (z = 1), and
-// must stay where the gun points, so near geometry is left alone.
-void r3d_anchor_hud(R3DScene& out) {
-    if (out.viewports.empty()) return;
-    int scene_priority = out.viewports.front().priority;
-    const float band = 72.0f;   // native pixels from each side of the 4:3 screen
-    for (const R3DViewport& v : out.viewports) {
-        if (v.priority == scene_priority) continue;
-        for (int pass = 0; pass < 2; pass++) {
-            uint32_t first = pass ? v.trans_first : v.opaque_first, count = pass ? v.trans_count : v.opaque_count;
-            for (uint32_t t = 0; t + 2 < count; t += 3) {
-                R3DVertex* tri = &out.vertices[first + t];
-                float b[4];
-                if (-tri[0].pos[2] < 10.0f || !screen_bbox(v, tri, b)) continue;
-                uint32_t flag = b[2] < v.x + band ? R3D_HUD_LEFT : b[0] > v.x + v.w - band ? R3D_HUD_RIGHT : 0;
-                for (int k = 0; k < 3; k++) tri[k].flags |= flag;
-            }
-        }
-    }
-}
-
 void r3d_strip_letterbox(R3DScene& out) {
     if (out.viewports.empty()) return;
     int scene_priority = out.viewports.front().priority;

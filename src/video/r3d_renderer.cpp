@@ -92,8 +92,8 @@ VkShaderModule make_module(VkDevice dev, const uint32_t* code, size_t bytes) {
 // Push constants of compose.frag (layout(push_constant) uniform Compose), in
 // its order; what each field means is documented there
 struct R3DRenderer::ComposePush {
-    float scale[2], offset[2], crosshair[2], window[2], layer2d[2], filter2d[2];
-    float hud[4], sky[4], effects[4], motion[4], crosshair2[4];
+    float scale[2], offset[2], finish[2], window[2], layer2d[2], filter2d[2];
+    float hud[4], sky[4], effects[4], motion[4];
 };
 
 ScreenLayout compute_layout(float win_w, float win_h, float max_aspect) {
@@ -1767,7 +1767,7 @@ void R3DRenderer::record_world(const Frame& f) {
             bool in_space = false;
             for (size_t k = i; k < j; k++) in_space |= vps[k].world && vps[k].space;
             auto deferred = [&](const R3DViewport& v) {
-                return swt_hud_ && !actor_ao && split && world_here && !in_space && v.shares_world;
+                return !actor_ao && split && world_here && !in_space && v.shares_world;
             };
             // Steps: opaque, the occlusion then the deferred opaque actors, translucent
             for (int step = 0; step < 3; step++) {
@@ -1809,7 +1809,7 @@ void R3DRenderer::record_world(const Frame& f) {
                     // Full-screen viewports are widened (wider horizontal field of
                     // view, same vertical one); smaller ones keep their 4:3 place
                     bool full = v.x <= 0.5f && v.w >= SCREEN_W - 0.5f;
-                    bool to_edge = v.hud_left && swt_hud_ && hud_band_ && hud_edges_;
+                    bool to_edge = v.hud_left && hud_band_ && hud_edges_;
                     float vx = full ? 0.0f : v.x + (to_edge ? 0.0f : lay.game_x0), vw = full ? lay.view_w : v.w;
                     VkViewport viewport{vx * sx + jitter_x, v.y * sy + jitter_y, vw * sx, v.h * sy, 0.0f, 1.0f};
                     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -1844,7 +1844,7 @@ void R3DRenderer::record_world(const Frame& f) {
                     // resolution, 1 - the share of the picture shown the 3D is drawn at: the
                     // textures are filtered as sharp as the picture shown needs, r3d.frag)
                     pc.quality[1] = aniso_ + std::clamp(1.0f - float(out_w) / float(f.up_w), 0.0f, 0.9f);
-                    pc.quality[2] = full && (!swt_hud_ || (hud_band_ && hud_edges_)) ? 2.0f * lay.game_x0 / lay.view_w : 0.0f;
+                    pc.quality[2] = full && hud_band_ && hud_edges_ ? 2.0f * lay.game_x0 / lay.view_w : 0.0f;
                     pc.quality[3] = interp_;
                     // Translucent surfaces that are not effects (a whole model made
                     // see-through, like the Carnotaurus' camouflage): only the
@@ -1984,7 +1984,7 @@ void R3DRenderer::record_dlaa(const Frame& f) {
 
 // The composition's push constants for this frame
 R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
-    static_assert(sizeof(ComposePush) == 128, "compose.frag push constant block");
+    static_assert(sizeof(ComposePush) == 112, "compose.frag push constant block");
     const VkExtent2D extent = f.extent;
     const ScreenLayout& lay = f.lay;
     float W = float(extent.width), H = float(extent.height);
@@ -1994,7 +1994,7 @@ R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
     float seconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - launch).count();
     ComposePush pc{.scale = {lay.view_w * lay.scale / W, SCREEN_H * lay.scale / H},
                    .offset = {lay.ox / W, lay.oy / H},
-                   .crosshair = {-1, -1},
+                   .finish = {sharpen_, 0},
                    .window = {W, H},
                    .layer2d = {lay.game_x0 / lay.view_w, SCREEN_W / lay.view_w},
                    .filter2d = {smooth_2d_ ? 1.0f : 0.0f, lay.scale},
@@ -2002,8 +2002,7 @@ R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
                            extend_back ? 1.0f : 0.0f},
                    .sky = {seconds, 0, sun_ ? 1.0f : 0.0f, 0},
                    .effects = {bloom_strength_, saturation_, gamma_, 0},
-                   .motion = {back_shift_, 0, swt_hud_ ? 1.0f : 0.0f, fxaa() ? 1.0f : 0.0f},
-                   .crosshair2 = {-1, -1, sharpen_, 0}};
+                   .motion = {back_shift_, 0, 0, fxaa() ? 1.0f : 0.0f}};
     // Space (r3d_share_world) and any world against a black backdrop (the
     // Death Star trench): the glow of lasers and engines does not depend on
     // how much of a big ship or the station's surface fills the view
@@ -2011,26 +2010,19 @@ R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
     // layer: Hoth's sky is 3D, and its snow then glowed white all over)
     if (scene_ && std::any_of(scene_->viewports.begin(), scene_->viewports.end(),
                               [](const R3DViewport& v) { return v.world && v.space; }))
-        pc.crosshair2[3] = 1.0f;
+        pc.finish[1] = 1.0f;
     // ... and those scenes get the cinematic grade (SWT_NO_CINEMA: off)
     static const bool no_cinema = getenv("SWT_NO_CINEMA") != nullptr;
-    if (!no_cinema) pc.motion[1] = pc.crosshair2[3];
-    float* at[2] = {pc.crosshair, pc.crosshair2};
-    for (int p = 0; p < 2; p++)
-        if (crosshair_visible_[p]) {   // game-screen fraction -> window pixels
-            at[p][0] = lay.ox + (lay.game_x0 + crosshair_x_[p] * SCREEN_W) * lay.scale;
-            at[p][1] = lay.oy + crosshair_y_[p] * SCREEN_H * lay.scale;
-        }
+    if (!no_cinema) pc.motion[1] = pc.finish[1];
     return pc;
 }
 
 // The reduced passes (glow, light shaft mask, diffusion) see the whole 3D
-// view in their own target, without crosshair or sky glow
+// view in their own target, without sky glow
 R3DRenderer::ComposePush R3DRenderer::reduced(const ComposePush& pc, const Image& to) {
     ComposePush p = pc;
     p.scale[0] = p.scale[1] = 1;
     p.offset[0] = p.offset[1] = 0;
-    p.crosshair[0] = p.crosshair[1] = p.crosshair2[0] = p.crosshair2[1] = -1;
     p.filter2d[1] = float(to.h) / SCREEN_H;
     p.sky[1] = 0;
     return p;

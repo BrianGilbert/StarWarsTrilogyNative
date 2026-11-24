@@ -79,12 +79,6 @@ public:
     // back layer pixel shows (TileGen::SKY_COORDS_W x SKY_COORDS_H BGRA texels)
     void add_sky_pictures(const std::vector<RgbaImage>& images);
     void set_sky_coords(const uint32_t* coords);
-    // Extra crosshair at the real gun position of a player (fraction of the game screen)
-    void set_crosshair(int player, bool visible, float x, float y) {
-        crosshair_visible_[player] = visible;
-        crosshair_x_[player] = x;
-        crosshair_y_[player] = y;
-    }
 
     void record(VkCommandBuffer cmd, VkImageView target, VkExtent2D extent);
     // Dynamic resolution (DLAA and DLSS): the graphics card's time for an
@@ -325,10 +319,6 @@ private:
     float haze_color_[3] = {0.6f, 0.66f, 0.64f};   // horizon colour, eased from frame to frame
     std::vector<float> back_rows_ = std::vector<float>(384 * 4);   // per back layer row: colour sum, pixels
     float back_luma_ = 0;   // average brightness of the back layer (0..1, set_layers)
-    bool swt_hud_ = false;   // Star Wars Trilogy's HUD layout (score/level top, dialogue/shield bottom)
-public:
-    void set_swt_hud(bool on) { swt_hud_ = on; }
-private:
     bool layers_dirty_ = false;
     int tex_y0_ = 0, tex_y1_ = 0;
 
@@ -354,7 +344,6 @@ private:
     VkPipelineLayout ao_layout_ = VK_NULL_HANDLE;
     VkPipeline ao_pass_ = VK_NULL_HANDLE, ao_apply_ = VK_NULL_HANDLE, ao_apply_glow_ = VK_NULL_HANDLE;
     VkFormat compose_format_ = VK_FORMAT_UNDEFINED;
-    bool crosshair_visible_[2] = {};
     float max_aspect_ = 16.0f / 9.0f;
     bool smooth_2d_ = true;
     bool hud_edges_ = true, hud_band_ = true;
@@ -378,5 +367,4 @@ private:
     float sky_sun_step_[2] = {};   // how far it moved there with the sky (for the interpolation)
     void step_sky_sun(const WorldPose& pose, const float view[4], float view_w, float out[3]);
     float back_shift_ = 0.0f;
-    float crosshair_x_[2] = {}, crosshair_y_[2] = {};
 };
