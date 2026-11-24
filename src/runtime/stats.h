@@ -60,6 +60,6 @@ std::vector<int> stats_take_new_achievements();   // unlocked since the last cal
 void stats_save();                  // at exit, waiting for the files (it also saves by itself as things change, the running counts every 5 min)
 
 // Game thread
-void stats_frame();                 // every vblank
+void stats_frame();                 // every vblank, every run: the game state (inputs.h) and, after stats_init, the records
 bool swt_playing();                 // a game being played (mode byte 6-9 and the game's sequence step)
 void stats_enter(Ctx& c, uint32_t fn);   // entry of a hooked function
