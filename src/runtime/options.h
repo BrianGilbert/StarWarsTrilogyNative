@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
-#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -70,19 +69,13 @@ struct Options {
     std::vector<std::string> traces; // --trace A,B,... (each occurrence)
 };
 
-// Handler for options the table does not know (a module with options of its
-// own): returns how many arguments it consumed, 0 if the option is
-// not its. `next` is the following argument or nullptr.
-using ExtraOption = std::function<int(Options&, const std::string& name, const char* next)>;
-
 // Fills `o` from the command line. Returns true to run the game; otherwise
 // (--help, an unknown option or a bad value) the usage or the error has been
 // printed and exit_code says how to end
-bool parse_options(Options& o, int argc, char** argv, const ExtraOption& extra, int& exit_code);
+bool parse_options(Options& o, int argc, char** argv, int& exit_code);
 
 // Whether an argument asks for a test run, which leaves the menu out so tests
-// always start from the same defaults: the options marked so in the table,
-// plus the names in `more`
-bool options_disable_menu(int argc, char** argv, std::initializer_list<const char*> more = {});
+// always start from the same defaults: the options marked so in the table
+bool options_disable_menu(int argc, char** argv);
 
 void print_usage(FILE* out);

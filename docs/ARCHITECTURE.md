@@ -44,7 +44,7 @@ Lost World port (Model 3 Step 1.5); this file lists what changed for Step 2.1.
 swtrilgy.zip ──romtool.py──▶ data/*.bin   (StarWarsTrilogy.exe also reads the zip directly: rom_zip.cpp)
 data/crom.bin ──analyze.py──▶ out/listing.asm, functions.txt, report.txt
               ──recomp.py──▶ build/gen/*.cpp  (one C++ function per PPC function)
-gen/*.cpp + runtime/ (memory, Real3D, SCSP, input) ──CMake/MSVC──▶ StarWarsTrilogy.exe
+gen/*.cpp + runtime/ (memory, Real3D, SCSP, input) ──CMake──▶ StarWarsTrilogy.exe
 ```
 
 ## macOS
@@ -84,6 +84,23 @@ and cannot take focus; the cursor and fullscreen state are left alone. Vulkan st
 and `--shot` work. Errors go to stderr instead of opening a dialog. Add `MTL_DEBUG_LAYER=1`
 and `METAL_DEVICE_WRAPPER_TYPE=1` to enable Metal API validation. Use an isolated working folder with the game's
 resources when testing, so settings and records stay separate from normal play.
+
+## Linux
+
+Linux (`src/platform/linux/`, `build_linux.sh`) is maintained by contributors and checked by CI only. It shares the
+macOS layer for the Win32 names (`src/platform/mac/`: `windows.h`, `compat.h`, SDL3 sound and one mouse) and has
+its own window, text and pictures:
+
+| Windows | Linux |
+|---|---|
+| Win32 window, messages, raw input | SDL3 on X11 or Wayland (`vk_window_linux.cpp`); one mouse (`raw_mice_mac.cpp`) |
+| WASAPI | SDL3 audio (`audio_out_mac.cpp`) |
+| GDI text | FreeType, built into the program (`win32_linux.cpp`) |
+| WIC | stb_image (`image_io_linux.cpp`) |
+| Media Foundation | none: the splash picture instead of the video (`splash_video_linux.cpp`) |
+| NGX (DLAA) | none (`src/video/dlss_stub.cpp`) |
+
+Build steps are in `docs/LINUX.md`.
 
 ## Status
 

@@ -27,7 +27,6 @@
 #include "runtime.h"
 #include "drive_board.h"
 #include "jtag.h"
-#include "scsi53c810.h"
 #include "../video/tilegen.h"
 #include "../audio/audio_out.h"
 #include "../audio/sound_board.h"
@@ -158,7 +157,6 @@ uint64_t g_dec_irqs = 0;
 
 [[noreturn]] void exit_from_game_thread(int code);
 uint8_t g_adc_channel = 0;
-Ncr53c810 g_scsi;
 DriveBoard g_drive;   // force feedback board of the joystick (its own Z80)
 Jtag g_jtag;   // Real3D ASIC IDs, checked at boot on Step 2.1
 
@@ -204,7 +202,6 @@ std::unordered_map<uint32_t, uint64_t> g_samples;
 
 // Control registers by exact address; memories (Real3D, backup RAM) by page
 bool is_page(uint32_t a) {
-    if (a >= 0xC1000000 && a < 0xC1000100) return false;   // 53C810 registers
     return !(a >= 0xF0000000 && a < 0xF1000000 && !(a >= 0xF00C0000 && a < 0xF0100000));
 }
 uint32_t stat_key(uint32_t a) { return is_page(a) ? (a & ~0xFFFu) : a; }
@@ -365,10 +362,6 @@ uint8_t dev_read8(uint32_t a) {
         uint32_t v = pci_read(le32_at(dev_ptr(0xF0800CF8)));
         return uint8_t(v >> (8 * (a - 0xF0C00CFC)));
     }
-    if (a >= 0xC1000000 && a < 0xC1000100) {
-        uint8_t v;
-        if (g_scsi.read8(a & 0xFF, v)) return v;
-    }
     return *dev_ptr(a);
 }
 
@@ -404,7 +397,6 @@ void dev_write8(uint32_t a, uint8_t v) {
     *dev_ptr(a) = v;
     if (a == 0xF0C00CFF)
         g_pci_cfg[le32_at(dev_ptr(0xF0800CF8)) & 0xFFFFFFFC] = le32_at(dev_ptr(0xF0C00CFC));
-    if (a >= 0xC1000000 && a < 0xC1000100) g_scsi.wrote8(a & 0xFF, v, dev_ptr(0xC1000000));
     // 0x94000000 is a texture FIFO: the whole stream is stored in order
     if ((a >> 24) == 0x94) g_texture_fifo.push_back(v);
     // 0x90000000: texture port, three words (source, header, trigger) per upload
@@ -639,7 +631,6 @@ void report() {
         it = next;
     }
 
-    g_scsi.report();
     g_sound.close_wav();
     if (!g_trace_hits.empty()) {
         printf("\nTraced functions (times called):\n");
@@ -788,7 +779,7 @@ static void note_range(uint32_t a, uint32_t n, bool write, uint8_t last) {
     }
 }
 
-// Block copy for the 53C810 Memory Move and the Real3D DMA. Plain memories
+// Block copy for the Real3D DMA. Plain memories
 // (RAM, ROM, the Real3D pages and the texture FIFO) are copied in runs that
 // stay inside one 64 KB page, with the same side effects as the byte path
 // (dirty pages, FIFO stream, statistics); registers and ports go through

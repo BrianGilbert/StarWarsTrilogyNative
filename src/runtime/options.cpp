@@ -156,7 +156,6 @@ const std::vector<Entry>& table() {
 }
 
 const Entry* find(const char* name) {
-    if (strcmp(name, "--luz") == 0) name = "--light-gain";   // its old name, still accepted
     for (const Entry& e : table())
         if (e.name && strcmp(e.name, name) == 0) return &e;
     return nullptr;
@@ -180,17 +179,15 @@ void print_usage(FILE* out) {
     }
 }
 
-bool options_disable_menu(int argc, char** argv, std::initializer_list<const char*> more) {
+bool options_disable_menu(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         const Entry* e = find(argv[i]);
         if (e && e->test) return true;
-        for (const char* m : more)
-            if (strcmp(argv[i], m) == 0) return true;
     }
     return false;
 }
 
-bool parse_options(Options& o, int argc, char** argv, const ExtraOption& extra, int& exit_code) {
+bool parse_options(Options& o, int argc, char** argv, int& exit_code) {
     for (int i = 1; i < argc; i++) {
         const char* a = argv[i];
         if (strcmp(a, "--help") == 0 || strcmp(a, "-h") == 0 || strcmp(a, "/?") == 0) {
@@ -215,11 +212,6 @@ bool parse_options(Options& o, int argc, char** argv, const ExtraOption& extra, 
                 exit_code = 1;
                 return false;
             }
-            continue;
-        }
-        int used = extra ? extra(o, a, next) : 0;
-        if (used > 0) {
-            i += used - 1;
             continue;
         }
         fprintf(stderr, "Unknown option: %s\n", a);

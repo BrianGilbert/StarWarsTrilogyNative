@@ -92,7 +92,7 @@ void rt_trace(Ctx& c, uint32_t fn);
 extern uint32_t g_recent_fn[64];
 extern uint32_t g_recent_idx;
 void rt_print_recent();
-void rt_dma_copy(uint32_t dst, uint32_t src, uint32_t n, bool swap = false);   // 53C810 Memory Move, Real3D DMA
+void rt_dma_copy(uint32_t dst, uint32_t src, uint32_t n, bool swap = false);   // Real3D DMA
 #define ENTER(pc) do { g_recent_fn[g_recent_idx++ & 63] = (pc); \
     if (g_trace_bits[((pc) >> 5) & 511] & (1 << (((pc) >> 2) & 7))) rt_trace(c, pc); POLL(pc); } while (0)
 

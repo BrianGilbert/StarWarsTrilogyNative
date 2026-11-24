@@ -1,20 +1,16 @@
-Fuentes para el texto en alta resolución (tools/make_text_atlas.py), de Google
-Fonts, bajo la SIL Open Font License 1.1 (se pueden redistribuir):
+Fonts from Google Fonts, under the SIL Open Font License 1.1 (redistributable):
 
-- SairaExtraCondensed-Bold.ttf: Saira, de Omnibus-Type (OFL-Saira.txt).
-  INSERT COIN, CREDITS, FREE PLAY y sus números.
-- BarlowCondensed-Bold.ttf, BarlowCondensed-BoldItalic.ttf: Barlow, de Jeremy
-  Tribby (OFL-Barlow.txt). Marcador y carteles de los jefes.
-- BarlowCondensed-SemiBold.ttf, BarlowCondensed-Medium.ttf, Barlow-Regular.ttf:
-  Barlow (OFL-Barlow.txt). Página de opciones del menú (src/ui/frontend.cpp).
-- Orbitron[wght].ttf: Orbitron, de Matt McInerney (OFL-Orbitron.txt). Pantalla
-  STAGE SELECT (tools/make_backdrop.py).
-- Exo2-Italic[wght].ttf, Exo2[wght].ttf: Exo 2, de Natanael Gama (OFL-Exo2.txt).
-  "InGEN" de STAGE SELECT y "Chapter N" de los resultados.
-- Anton-Regular.ttf: Anton, de Vernon Adams (OFL-Anton.txt). "STAGE N" de los
-  resultados.
-- ArchivoBlack-Regular.ttf: Archivo Black, de Omnibus-Type (OFL-ArchivoBlack.txt).
-  Lema de la pantalla del FBI.
-- Arimo[wght].ttf: Arimo, de Steve Matteson (OFL-Arimo.txt). Frases del tutorial.
-- ShareTechMono-Regular.ttf: Share Tech Mono, de Carrois Type Design
-  (OFL-ShareTechMono.txt). Menús de test y avisos.
+- SairaExtraCondensed-Bold.ttf: Saira, by Omnibus-Type (OFL-Saira.txt). Menu
+  titles and the achievement toast (src/ui/frontend.cpp, achievement_toast.cpp).
+- BarlowCondensed-Bold.ttf, BarlowCondensed-SemiBold.ttf,
+  BarlowCondensed-Medium.ttf, Barlow-Regular.ttf: Barlow, by Jeremy Tribby
+  (OFL-Barlow.txt). Menu items and text (src/ui/frontend.cpp,
+  achievement_toast.cpp).
+- ShareTechMono-Regular.ttf: Share Tech Mono, by Carrois Type Design
+  (OFL-ShareTechMono.txt). Key and button prompts (src/ui/frontend.cpp).
+- Anton-Regular.ttf: Anton, by Vernon Adams (OFL-Anton.txt). The app icon
+  (tools/make_icon.py).
+- Orbitron[wght].ttf: Orbitron, by Matt McInerney (OFL-Orbitron.txt). Labels
+  made by tools/make_swt_labels.py.
+- Exo2[wght].ttf: Exo 2, by Natanael Gama (OFL-Exo2.txt). Digits of the HD
+  text atlas (tools/make_text_atlas.py).

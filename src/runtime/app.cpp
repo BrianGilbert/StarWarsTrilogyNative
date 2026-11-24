@@ -237,7 +237,7 @@ int main(int argc, char** argv) {
     }
     int exit_code = 0;
     const bool menu_allowed = g_opt.menu;   // no test run (--no-menu itself is read just below)
-    if (!parse_options(g_opt, argc, argv, nullptr, exit_code)) return exit_code;
+    if (!parse_options(g_opt, argc, argv, exit_code)) return exit_code;
     if (!g_opt.menu) g_opt.arcade = false;   // (--no-menu: the game as a test run, PC EDITION's settings)
     // What the options set outside the struct: emulation globals and the gun
     g_data_dir = g_opt.data_dir;
@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
         g_frame_limit = 600;
     }
     g_collect_stats = g_frame_limit != INT32_MAX;   // report() prints them when the run ends
-    printf("Star Wars Trilogy Native - part 4 (%s)\n", g_opt.headless ? "no window" : "Vulkan window, 3D + 2D");
+    printf("Star Wars Trilogy Native (%s)\n", g_opt.headless ? "no window" : "Vulkan window, 3D + 2D");
     {
         std::vector<uint8_t> program, samples, dsb_program, dsb_mpeg;
         if (!load_game_rom(program, samples, dsb_program, dsb_mpeg)) return 1;
