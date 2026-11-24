@@ -31,9 +31,7 @@ struct Options {
     bool pixel_2d = false;           // --pixel2d: 2D layers without xBR upscaling
     bool hud_centre = false;         // --hud-centre: keep the HUD in the 4:3 area
     bool letterbox = false;          // --letterbox: keep the black cutscene bars
-    bool classic_text = false;       // --classic-text: original pixel-art letters instead of vector fonts
     bool interp = true;              // --no-interp: show game frames as they are
-    bool dump_textures = false;      // --dump-textures: write new textures to out/textures
     float light_gain = 1.0f;         // --light-gain: light multiplier on the sun and the ambient
     float bloom = 1;                 // --bloom [N] / --no-bloom: glow around bright things
     float ao = 1;                    // --ao [N] / --no-ao: ambient occlusion (up to 1)

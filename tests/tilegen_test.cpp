@@ -1,9 +1,9 @@
 // Golden test of the 2D composition (TileGen::compose). 40 pseudo-random
 // VRAM images (fixed seed, so identical on every machine and compiler) are
-// composed and every output buffer is hashed; the hashes must match
-// tests/tilegen_expected.txt, which was produced by the original, slow
-// implementation before the compose fast paths were added. Anything that
-// changes a single pixel of any output shows up here.
+// composed and both output images are hashed; the hashes must match
+// tests/tilegen_expected.txt (the first reference came from the original,
+// slow implementation, before the compose fast paths were added). Anything
+// that changes a single pixel of either shows up here.
 //
 //   tilegen_test <expected.txt>            compares
 //   tilegen_test <expected.txt> --write    regenerates the file (new reference)
@@ -21,13 +21,11 @@ namespace {
 
 struct Trial {
     uint32_t format;
-    bool raws;
     uint64_t hash;
 };
 
 // The images: all four layers random, every third one sparse (so the
-// transparent paths run), random format and scroll registers, every other
-// one with the raw/top/under buffers requested as well.
+// transparent paths run), random format and scroll registers.
 std::vector<Trial> run() {
     std::mt19937 rng(12345);
     std::vector<uint8_t> vram(TILEGEN_SIZE);
@@ -44,21 +42,11 @@ std::vector<Trial> run() {
             uint32_t sc = (rng() & 0x01FF03FF) | ((rng() & 1) ? 0x80000000u : 0) | ((rng() & 3) == 0 ? 0x8000 : 0);
             put(0x180000 + 0x60 + 4 * l, sc);
         }
-        bool raws = trial & 1;
-        std::vector<uint32_t> back(BACK_W * SCREEN_H), front(SCREEN_W * SCREEN_H), front_raw(SCREEN_W * SCREEN_H),
-            front_top(SCREEN_W * SCREEN_H), back_raw(SCREEN_W * SCREEN_H), back_top(SCREEN_W * SCREEN_H),
-            back_under(SCREEN_W * SCREEN_H);
-        TileGen::compose(vram.data(), {.back = back.data(),
-                                       .front = front.data(),
-                                       .front_raw = raws ? front_raw.data() : nullptr,
-                                       .front_raw_top = raws ? front_top.data() : nullptr,
-                                       .back_raw = raws ? back_raw.data() : nullptr,
-                                       .back_raw_top = raws ? back_top.data() : nullptr,
-                                       .back_under = raws ? back_under.data() : nullptr});
+        std::vector<uint32_t> back(BACK_W * SCREEN_H), front(SCREEN_W * SCREEN_H);
+        TileGen::compose(vram.data(), {.back = back.data(), .front = front.data()});
         uint64_t h = FNV1A_BASIS;
-        for (auto* v : {&back, &front, &front_raw, &front_top, &back_raw, &back_top, &back_under})
-            h = fnv1a_words(v->data(), v->size(), h);
-        out.push_back({format, raws, h});
+        for (auto* v : {&back, &front}) h = fnv1a_words(v->data(), v->size(), h);
+        out.push_back({format, h});
     }
     return out;
 }
@@ -110,9 +98,9 @@ int main(int argc, char** argv) {
             perror(path);
             return 2;
         }
-        fprintf(f, "# TileGen::compose golden hashes: trial format raws fnv1a64 (see tests/tilegen_test.cpp)\n");
+        fprintf(f, "# TileGen::compose golden hashes: trial format fnv1a64 (see tests/tilegen_test.cpp)\n");
         for (size_t i = 0; i < got.size(); i++)
-            fprintf(f, "%zu %04X %d %016llX\n", i, got[i].format, int(got[i].raws), (unsigned long long)got[i].hash);
+            fprintf(f, "%zu %04X %016llX\n", i, got[i].format, (unsigned long long)got[i].hash);
         fclose(f);
         printf("wrote %s (%zu cases)\n", path, got.size());
         return 0;
@@ -128,18 +116,17 @@ int main(int argc, char** argv) {
     while (fgets(line, sizeof line, f)) {
         if (line[0] == '#' || line[0] == '\n') continue;
         unsigned idx, format;
-        int raws;
         unsigned long long hash;
-        if (sscanf(line, "%u %x %d %llx", &idx, &format, &raws, &hash) != 4 || idx >= got.size()) {
+        if (sscanf(line, "%u %x %llx", &idx, &format, &hash) != 3 || idx >= got.size()) {
             fprintf(stderr, "invalid line: %s", line);
             return 2;
         }
         seen++;
         const Trial& t = got[idx];
-        bool ok = t.format == format && int(t.raws) == raws && t.hash == hash;
+        bool ok = t.format == format && t.hash == hash;
         if (!ok)
-            printf("case %u: expected %04X %d %016llX, got %04X %d %016llX\n", idx, format, raws, hash, t.format,
-                   int(t.raws), (unsigned long long)t.hash);
+            printf("case %u: expected %04X %016llX, got %04X %016llX\n", idx, format, hash, t.format,
+                   (unsigned long long)t.hash);
         fails += !ok;
     }
     fclose(f);

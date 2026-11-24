@@ -1,13 +1,5 @@
 #version 460
 #extension GL_GOOGLE_include_directive : require
-#ifdef NO_INDEXING
-// GPUs without descriptor indexing (r3d_renderer.cpp; the Raspberry Pi 5): the
-// arrays hold one picture, never picked by a variable
-#define NONUNIFORM(i) 0
-#else
-#extension GL_EXT_nonuniform_qualifier : require
-#define NONUNIFORM(i) nonuniformEXT(i)
-#endif
 #ifdef RAY_TRACING
 #extension GL_EXT_ray_query : require
 #endif
@@ -22,18 +14,10 @@ layout(location = 3) in vec4 color;
 layout(location = 4) flat in uint tex;
 layout(location = 5) flat in uint flags;
 layout(location = 6) in vec3 params;
-layout(location = 7) flat in uint replace;
 layout(location = 8) in vec4 clip_now;
 layout(location = 9) in vec4 clip_before;
 
 layout(set = 0, binding = 0) uniform usampler2D texture_ram;   // 2048x2048 R16_UINT
-#ifdef FEW_IMAGES
-// GPUs that take few images per shader (r3d_renderer.cpp): the texture pack gets what fits
-layout(constant_id = 0) const int REPLACE_SLOTS = 4096;
-layout(set = 0, binding = 1) uniform sampler2D replacements[REPLACE_SLOTS];
-#else
-layout(set = 0, binding = 1) uniform sampler2D replacements[4096];   // texture pack, RGBA8 with mips
-#endif
 
 layout(push_constant) uniform Viewport {
     mat4 proj;
@@ -193,12 +177,6 @@ vec4 bilinear(ivec2 base, ivec2 size, vec2 st, int level, uint fmt) {
 
 // duv_dx/duv_dy: screen-space derivatives of uv, taken in uniform control flow
 vec4 sample_texture(vec2 duv_dx, vec2 duv_dy) {
-    if (replace != 0u) {   // texture pack image: hardware trilinear + anisotropic filtering
-        vec2 u = uv;
-        if ((flags & MIRROR_U) != 0u) { float m = mod(u.x, 2.0); u.x = m > 1.0 ? 2.0 - m : m; }
-        if ((flags & MIRROR_V) != 0u) { float m = mod(u.y, 2.0); u.y = m > 1.0 ? 2.0 - m : m; }
-        return textureGrad(replacements[NONUNIFORM(replace)], u, duv_dx, duv_dy);
-    }
     ivec2 base = ivec2(int(tex & 2047u), int((tex >> 11) & 2047u));
     ivec2 size = ivec2(32 << int((tex >> 22) & 7u), 32 << int((tex >> 25) & 7u));
     uint fmt = (tex >> 28) & 15u;
@@ -239,15 +217,10 @@ vec4 sample_texture(vec2 duv_dx, vec2 duv_dy) {
 // read as height, so the light, the shadows and the rim pick out the grain of
 // stone, bark, sheet metal and skin. Brightness at an offset (uv units).
 float relief_height(vec2 offset, vec2 duv_dx, vec2 duv_dy, int level) {
-    vec4 s;
-    if (replace != 0u) {
-        s = textureGrad(replacements[NONUNIFORM(replace)], uv + offset, duv_dx, duv_dy);
-    } else {
-        ivec2 base = ivec2(int(tex & 2047u), int((tex >> 11) & 2047u));
-        ivec2 size = ivec2(32 << int((tex >> 22) & 7u), 32 << int((tex >> 25) & 7u));
-        s = bilinear(base, size, (uv + offset) * vec2(size), level, (tex >> 28) & 15u);
-        s.rgb = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
-    }
+    ivec2 base = ivec2(int(tex & 2047u), int((tex >> 11) & 2047u));
+    ivec2 size = ivec2(32 << int((tex >> 22) & 7u), 32 << int((tex >> 25) & 7u));
+    vec4 s = bilinear(base, size, (uv + offset) * vec2(size), level, (tex >> 28) & 15u);
+    s.rgb = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
     return dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
 }
 
@@ -258,13 +231,12 @@ vec3 relief_normal(vec3 n, float h0, vec3 dpx, vec3 dpy, vec2 duv_dx, vec2 duv_d
     float nl = length(n);
     if (strength <= 0.0 || nl <= 0.0) return n;
     vec3 N = n / nl;
-    vec2 size = replace != 0u ? vec2(textureSize(replacements[NONUNIFORM(replace)], 0))
-                              : vec2(32 << int((tex >> 22) & 7u), 32 << int((tex >> 25) & 7u));
+    vec2 size = vec2(32 << int((tex >> 22) & 7u), 32 << int((tex >> 25) & 7u));
     // One step = the pixel's footprint (at least a texel), at the matching mip level
     vec2 footprint = max(abs(duv_dx), abs(duv_dy)) * size;
     float texels = max(max(footprint.x, footprint.y), 1.0);
     int max_level = max(findMSB(int(min(size.x, size.y))) - 1, 0);
-    int level = replace != 0u ? 0 : clamp(int(floor(log2(texels))), 0, max_level);
+    int level = clamp(int(floor(log2(texels))), 0, max_level);
     float hu = relief_height(vec2(texels / size.x, 0.0), duv_dx, duv_dy, level);
     float hv = relief_height(vec2(0.0, texels / size.y), duv_dx, duv_dy, level);
     vec3 dp2perp = cross(dpy, N), dp1perp = cross(N, dpx);

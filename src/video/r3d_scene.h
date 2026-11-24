@@ -12,7 +12,6 @@
 
 #include "r3d_state.h"
 #include "r3d_world.h"
-#include "texture_pack.h"
 
 struct R3DVertex {
     float pos[3];     // view space
@@ -24,10 +23,9 @@ struct R3DVertex {
     float shade;      // fixed shading value
     float fog;        // per-polygon fog intensity
     float spec;       // specular coefficient
-    uint32_t replace; // texture pack slot (0 = original texture)
     float prev[3];    // view-space position in the previous frame (interpolation)
 };
-static_assert(sizeof(R3DVertex) == 72, "vertex layout is shared with the shaders");
+static_assert(sizeof(R3DVertex) == 68, "vertex layout is shared with the shaders");
 
 enum : uint32_t {
     R3D_TEXTURED = 1 << 0,
@@ -135,22 +133,17 @@ public:
     // Removes the black cinematic bars the game draws over the scene
     void set_remove_letterbox(bool remove) { remove_letterbox_ = remove; }
     // The last build's stages in ms (SWT_FRAMELOG): the nodes and models, the
-    // world tracking, the screen heuristics, the texture pack, the previous frame's pairing
+    // world tracking, the screen heuristics, the previous frame's pairing
     const float* stage_ms() const { return stage_ms_; }
     // The game's horizontal field of view was widened by this much for
     // full-width viewports (widescreen culling): taken back out of their projection
     void set_fov_widened(float f) { fov_widened_ = f; }
     void set_view_wide(float f) { view_wide_ = f; }   // the 3D view's width over 4:3 (also where the game's culling is not widened)
-    // Replacement textures (nullptr = none)
     // Star Wars Trilogy, SKY: PROCEDURAL: Hoth's sky dome is not drawn (the procedural sky instead)
     void set_procedural_sky(bool on) { procedural_sky_ = on; }
-    void set_texture_pack(TexturePack* pack, R3DTextureRam* ram) {
-        pack_ = pack;
-        texture_ram_ = ram;
-    }
 
 private:
-    float stage_ms_[5] = {};
+    float stage_ms_[4] = {};
     struct Mat {
         float m[16];   // column-major
     };
@@ -175,7 +168,6 @@ private:
     Mat matrix(uint32_t index) const;
     void link_previous(R3DScene& out);
     uint32_t instance_key(uint32_t model_addr);
-    void apply_texture_pack(R3DScene& out);
 
     R3DStateReader rd_;   // the frame being built
     const uint8_t* vrom_ = nullptr;
@@ -222,9 +214,6 @@ private:
     bool procedural_sky_ = false;
     float fov_widened_ = 1.0f;
     float view_wide_ = 1.0f;
-    TexturePack* pack_ = nullptr;
-    R3DTextureRam* texture_ram_ = nullptr;
-    std::unordered_map<uint32_t, uint32_t> frame_slots_;   // texture word -> slot, this frame
 
     // Models drawn in each viewport, for the interpolation (copies of a model
     // are paired by place) and the world tracking

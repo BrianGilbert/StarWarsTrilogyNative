@@ -210,7 +210,6 @@ void R3DRayTracer::prepare(const R3DScene& scene, const R3DViewport& world, floa
                 }
                 c.tex = v[0].tex;
                 c.flags = flags;
-                c.replace = v[0].replace;
                 c.alpha = float(v[0].color >> 24) / 255.0f;
                 l.cut_data.push_back(c);
             } else {

@@ -1,8 +1,6 @@
-// FNV-1a, 64 bits: the one hash of the project, for the names of the texture
-// pack images, the 2D replacement cells, the backdrops and the text glyphs.
-// tools/lwhash.py computes the same values; tests/fnv_test checks both.
-// Two flavours exist because the data differs: bytes (texture images, tile
-// patterns) and 32-bit words (BGRA pixels, hashed as whole values).
+// FNV-1a, 64 bits: the one hash of the project, for recognising the 2D
+// layers' backdrops (sky_pack.cpp, tilegen.cpp). Two flavours exist because
+// the data differs: bytes and 32-bit words (BGRA pixels, hashed as whole values).
 #pragma once
 #include <cstddef>
 #include <cstdint>

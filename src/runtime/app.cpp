@@ -40,15 +40,12 @@
 #include "../ui/achievement_toast.h"
 #include "../ui/frontend.h"
 #include "../ui/menu_music.h"
-#include "../video/pack2d.h"
 #include "../video/r3d_explosions.h"
 #include "../video/r3d_renderer.h"
 #include "../video/r3d_scene.h"
 #include "../video/r3d_screen.h"
 #include "../video/r3d_state.h"
 #include "../video/sky_pack.h"
-#include "../video/text_hd.h"
-#include "../video/texture_pack.h"
 #include "../video/tilegen.h"
 #include "../video/ui_overlay.h"
 #include "../video/vk_presenter.h"
@@ -416,22 +413,10 @@ int main(int argc, char** argv) {
     R3DSceneBuilder builder;
     builder.set_remove_letterbox(!g_opt.letterbox);
     builder.set_procedural_sky(g_opt.sky_procedural);
-    TexturePack pack;
-    pack.init("textures", g_opt.dump_textures ? "out/textures" : "");
-    pack.set_slot_limit(renderer.replacement_slots());
-    builder.set_texture_pack(&pack, &g_texture_ram);
-    // 2D replacements: the foreground (GPU slots 1-27) and the layers below the
-    // 3D image (28-55; the backdrops of SkyPack use 56-63)
-    // (none of them, procedural sky included, on GPUs that cannot bind the pictures)
-    const bool pictures = renderer.overlay_slots() >= Pack2D::MAX_SLOTS;
-    Pack2D pack2d, pack2d_back;
-    if (pictures) {
-        pack2d.init("textures/2d", 1, 27);
-        pack2d_back.init("textures/2d_back", 28, SkyPack::FIRST_SLOT - 1);
-    }
     SkyPack sky;   // sky and other backdrops below the 3D image
-    sky.init("textures/sky", g_opt.dump_textures ? "out/sky" : "");
-    if (!pictures) sky.disable();
+    sky.init("textures/sky", "");
+    // (no procedural sky on GPUs that cannot bind the pictures)
+    if (renderer.overlay_slots() <= SkyPack::LAST_SLOT) sky.disable();
     sky.set_procedural(g_opt.sky_procedural);
     // Interpolation of the back layers (the sky): where each row's picture was
     // in the last two 2D frames composed, and the vblanks of the 2D frames
@@ -439,10 +424,7 @@ int main(int argc, char** argv) {
     // between the 3D frames of those same vblanks)
     std::vector<int32_t> back_rows(SCREEN_H * 3), back_rows_prev(SCREEN_H * 3, -1);
     uint64_t back_rows_frame = ~0ull, shift_from = ~0ull, shift_to = ~0ull, built_from = ~0ull;
-    TextHD text;   // menus, captions and score drawn from vector fonts
-    if ((g_opt.menu || !g_opt.classic_text) && text.init("textures/text")) renderer.set_text_atlas(text);
-    std::atomic<bool> capture_2d{false};   // F12 / --shot: the next 2D composition is saved
-    bool f12_was_down = false, f9_was_down = false;
+    bool f9_was_down = false;
     builder.set_vrom(g_vrom.data(), g_vrom.size());
     // The 2D layers of one vblank as the renderer takes them (compose_2d below)
     struct Layers2D {
@@ -450,11 +432,9 @@ int main(int argc, char** argv) {
         std::vector<uint8_t> vram = std::vector<uint8_t>(TILEGEN_SIZE);   // its layer memory
         std::vector<uint32_t> back = std::vector<uint32_t>(BACK_W * SCREEN_H),
                               front = std::vector<uint32_t>(SCREEN_W * SCREEN_H),
-                              text_cells = std::vector<uint32_t>(TextHD::ROW_TEXELS * TextHD::ROWS),
                               sky_coords = std::vector<uint32_t>(TileGen::SKY_COORDS_W * TileGen::SKY_COORDS_H);
-        std::vector<RgbaImage> overlays, sky_pictures;   // new pictures for the GPU slots
+        std::vector<RgbaImage> sky_pictures;   // new pictures for the GPU slots
         bool hud_band = false;
-        float overlay_brightness = 1;
         uint64_t shift_from = ~0ull, shift_to = ~0ull;   // the 2D frames of the back layers' shift
     };
     // A game frame made ready for the screen ahead of time: its 3D scene and
@@ -509,10 +489,6 @@ int main(int argc, char** argv) {
         out.frame = pick ? pick->frame : ~0ull;
         if (pick) memcpy(out.vram.data(), pick->vram.data(), TILEGEN_SIZE);
     };
-    // Scratch layers of the 2D composition (compose_2d)
-    std::vector<uint32_t> front_raw(SCREEN_W * SCREEN_H), front_raw_top(SCREEN_W * SCREEN_H),
-        back_raw(SCREEN_W * SCREEN_H), back_raw_top(SCREEN_W * SCREEN_H), back_under(SCREEN_W * SCREEN_H),
-        front_under(SCREEN_W * SCREEN_H);
     std::vector<uint16_t> tex_rows;
     uint64_t shown = ~0ull, presents = 0;
     double scene_total = 0;   // seconds of 2D composition and scene building since the last title
@@ -673,26 +649,13 @@ int main(int argc, char** argv) {
     // out.vram) for the renderer. One composition at a time (prep_mutex): the
     // 2D packs and the back layers' scroll keep state between them
     auto compose_2d = [&](Layers2D& out) {
-        const TextHD* hd_text = g_opt.classic_text ? nullptr : &text;
-        if (!hd_text) std::fill(out.text_cells.begin(), out.text_cells.end(), 0u);
-        bool capture = capture_2d.exchange(false);
-        if (capture) sky.capture();   // F12 also saves the backdrops, for textures/sky
         bool sky_on = sky.active();
-        // Raw layers for recognising the 2D replacements (and for F12)
-        bool raw_front = !pack2d.empty() || capture, raw_back = !pack2d_back.empty() || capture;
         TileGen::compose(out.vram.data(),
                          {.back = out.back.data(),
                           .front = out.front.data(),
-                          .front_raw = raw_front ? front_raw.data() : nullptr,
-                          .front_raw_top = raw_front ? front_raw_top.data() : nullptr,
-                          .front_under = raw_front ? front_under.data() : nullptr,
-                          .back_raw = raw_back ? back_raw.data() : nullptr,
-                          .back_raw_top = raw_back ? back_raw_top.data() : nullptr,
-                          .back_under = raw_back ? back_under.data() : nullptr,
-                          .text_cells = out.text_cells.data(),
                           .sky_coords = sky_on ? out.sky_coords.data() : nullptr,
                           .back_rows = back_rows.data()},
-                         hd_text, sky_on ? &sky : nullptr);
+                         sky_on ? &sky : nullptr);
         // How far each row of the back layers scrolled since the previous
         // 2D frame composed, for drawing them in between (renderer.set_back_shift)
         {
@@ -709,15 +672,6 @@ int main(int argc, char** argv) {
             back_rows_prev.swap(back_rows);
         }
         out.sky_pictures = sky.take_new_images();
-        if (capture) {   // F12 or --shot: capture for tools/make_2d_replacement.py
-            CreateDirectoryA("out/2d", nullptr);
-            std::string path = "out/2d/capture_" + std::to_string(out.frame);
-            Pack2D::save_capture(front_raw.data(), path);
-            Pack2D::save_capture(front_raw_top.data(), path + "_layer_a");   // only the texts' layers
-            Pack2D::save_capture(back_raw.data(), path + "_back");          // the layers below the 3D image
-            Pack2D::save_capture(back_raw_top.data(), path + "_back_layer_a");
-            printf("2D layer saved to %s.png\n", path.c_str());
-        }
         // The top band only moves to the screen edges when it looks like a
         // HUD: the score on the left, a gap, the level on the right
         auto lit = [&](int x0, int x1) {
@@ -759,24 +713,11 @@ int main(int argc, char** argv) {
         }
         r3d_set_swt_duel(g_swt_duel);
         r3d_set_swt_stage(g_swt_top_state);
-        int offset[3];
-        TileGen::front_offset(out.vram.data(), offset);
-        if (!pack2d.empty())
-            pack2d.apply(out.front.data(), SCREEN_W, front_raw.data(), front_raw_top.data(), out.text_cells.data(),
-                         false, front_under.data(), out.back.data() + BACK_MARGIN, BACK_W);
-        if (!pack2d_back.empty())
-            pack2d_back.apply(out.back.data() + BACK_MARGIN, BACK_W, back_raw.data(), back_raw_top.data(),
-                              out.text_cells.data(), true, back_under.data());
-        out.overlay_brightness = float(offset[0] + offset[1] + offset[2]) / (3 * 255.0f);
-        out.overlays = pack2d.take_new_images();
-        for (auto& img : pack2d_back.take_new_images()) out.overlays.push_back(std::move(img));
     };
     // Hands composed 2D layers to the renderer (their new pictures go separately)
     auto apply_2d = [&](const Layers2D& l) {
         renderer.set_sky_coords(l.sky_coords.data());
         renderer.set_hud_band(l.hud_band);
-        renderer.set_overlay_brightness(l.overlay_brightness);
-        renderer.set_text_cells(l.text_cells.data());
         renderer.set_layers(l.back.data(), l.front.data());
         shift_from = l.shift_from;
         shift_to = l.shift_to;
@@ -797,7 +738,7 @@ int main(int argc, char** argv) {
     // (or a later one) is taken, also those of frames never taken
     struct NewPictures {
         uint64_t serial = 0;
-        std::vector<RgbaImage> replacements, overlays, sky;
+        std::vector<RgbaImage> sky;
     };
     std::deque<NewPictures> ready_pictures;
     auto give_pictures = [&](uint64_t serial) {
@@ -810,8 +751,6 @@ int main(int argc, char** argv) {
             }
         }
         for (NewPictures& n : due) {
-            if (!n.replacements.empty()) renderer.add_replacements(n.replacements);
-            if (!n.overlays.empty()) renderer.add_overlays(n.overlays);
             if (!n.sky.empty()) renderer.add_sky_pictures(n.sky);
         }
     };
@@ -855,18 +794,15 @@ int main(int argc, char** argv) {
                 builder.build(*state, p->scene);
                 collect_scene_targets(builder, p->scene);
                 double built_at = qpc_seconds();
-                pictures.replacements = pack.take_new_images();
                 if (layers.valid()) layers.get();
                 double took = qpc_seconds() - from;
                 prep_us += uint64_t(took * 1e6);
                 prep_frames++;
                 const float* st = builder.stage_ms();
-                frame_log("R %llu %.6f %.3f %.3f  nodes %.2f track %.2f screen %.2f pack %.2f pair %.2f  polys %zu\n",
+                frame_log("R %llu %.6f %.3f %.3f  nodes %.2f track %.2f screen %.2f pair %.2f  polys %zu\n",
                           (unsigned long long)state->frame, qpc_seconds(), (built_at - from) * 1000, took * 1000, st[0],
-                          st[1], st[2], st[3], st[4], p->scene.polygons);
-                pictures.overlays.swap(p->layers.overlays);
+                          st[1], st[2], st[3], p->scene.polygons);
                 pictures.sky.swap(p->layers.sky_pictures);
-                p->layers.overlays.clear();
                 p->layers.sky_pictures.clear();
             }
             std::lock_guard<std::mutex> lock(ready_mutex);
@@ -1225,9 +1161,6 @@ int main(int argc, char** argv) {
             g_menu_open = g_hold = true;
         }
         join_update();
-        bool f12 = GetForegroundWindow() == presenter.hwnd() && (GetAsyncKeyState(VK_F12) & 0x8000);
-        if (f12 && !f12_was_down) capture_2d = true;
-        f12_was_down = f12;
         bool f9 = GetForegroundWindow() == presenter.hwnd() && (GetAsyncKeyState(VK_F9) & 0x8000);
         if (f9 && !f9_was_down && built) {   // debug snapshot of the scene on screen
             CreateDirectoryA("out/snap", nullptr);
@@ -1242,7 +1175,6 @@ int main(int argc, char** argv) {
             printf("Snapshot saved to %s.bin (lever %d %d)\n", base.c_str(), int(g_inputs.p[0].gun_x), int(g_inputs.p[0].gun_y));
         }
         f9_was_down = f9;
-        if (g_opt.shot_frame && shown != ~0ull && shown + 1 >= g_opt.shot_frame) capture_2d = true;
         // The 3D frame to draw. While interpolating, the picture shows the game
         // as it was at `shown_time`: a frame period plus the frames' lateness
         // before this image's moment on screen, so the next frame is always
@@ -1304,9 +1236,7 @@ int main(int argc, char** argv) {
             std::lock_guard<std::mutex> lock(prep_mutex);
             compose_2d(own_layers);
             if (!own_layers.sky_pictures.empty()) renderer.add_sky_pictures(own_layers.sky_pictures);
-            if (!own_layers.overlays.empty()) renderer.add_overlays(own_layers.overlays);
             own_layers.sky_pictures.clear();
-            own_layers.overlays.clear();
             apply_2d(own_layers);
             layers_prep.reset();
             scene_seconds += qpc_seconds() - scene_from;
@@ -1330,8 +1260,6 @@ int main(int argc, char** argv) {
                 builder.set_fov_widened(g_wide_applied);
                 builder.set_view_wide(g_opt.max_aspect > 4.0f / 3.0f + 0.01f ? std::max(1.0f, g_wide_view.load()) : 1.0f);
                 builder.build(*latest, own_scene);
-                auto images = pack.take_new_images();
-                if (!images.empty()) renderer.add_replacements(images);
                 built_prep.reset();
                 scene = &own_scene;
             }

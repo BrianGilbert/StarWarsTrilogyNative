@@ -8,7 +8,6 @@ layout(location = 3) in vec4 in_color;   // RGBA8 unorm
 layout(location = 4) in uint in_tex;
 layout(location = 5) in uint in_flags;
 layout(location = 6) in vec3 in_params;  // fixed shade, fog intensity, specular coefficient
-layout(location = 7) in uint in_replace; // texture pack slot (0 = original texture)
 layout(location = 8) in vec3 in_prev;    // position in the previous game frame
 
 layout(push_constant) uniform Viewport {
@@ -30,7 +29,6 @@ layout(location = 3) out vec4 color;
 layout(location = 4) flat out uint tex;
 layout(location = 5) flat out uint flags;
 layout(location = 6) out vec3 params;
-layout(location = 7) flat out uint replace;
 layout(location = 8) out vec4 clip_now;    // this image and the previous one, for motion vectors
 layout(location = 9) out vec4 clip_before;
 // The translucent pass must land exactly on the depth its pre-pass wrote
@@ -46,7 +44,6 @@ void main() {
     tex = in_tex;
     flags = in_flags;
     params = in_params;
-    replace = in_replace;
     gl_Position = vp.proj * vec4(pos, 1.0);
     vec4 before = vp.proj * vec4(mix(in_prev, in_pos, vp.params.w), 1.0);
     // HUD elements tagged by the scene builder go to the widescreen edges

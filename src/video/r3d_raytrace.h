@@ -27,8 +27,8 @@ public:
         float uv[6];        // the three corners
         uint32_t tex;       // R3DVertex::tex
         uint32_t flags;     // R3DVertex::flags
-        uint32_t replace;   // texture pack slot
         float alpha;        // vertex alpha
+        uint32_t pad = 0;   // (std430 rounds the struct to 8 bytes anyway)
     };
     static_assert(sizeof(Cutout) == 40, "layout is shared with raytrace.glsl");
     enum : uint32_t { RT_LOW = 1, RT_HIGH = 2 };   // instance masks (raytrace.glsl)

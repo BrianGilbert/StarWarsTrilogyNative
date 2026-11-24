@@ -53,8 +53,8 @@ The arm64 build is made with the Raspberry Pi 5 in mind (built on it with `./bui
   usable: update the system.
 - Built on a PC, the program needs a system at least as recent as the PC's (its glibc and C++ library): building on
   the Pi itself is the simplest.
-- The GPU has no descriptor indexing: the game runs without the texture pack and the 2D replacement pictures (the
-  game's own textures and text), and without ray tracing (the shadow map draws the sun shadows).
+- The GPU has no descriptor indexing: the game runs without the procedural skies (the game's own skies instead)
+  and without ray tracing (the shadow map draws the sun shadows).
 - It is far slower than a desktop GPU: start with sun shadows, ambient occlusion and anti-aliasing off
   (**Options > Graphics**, **Options > Display**), bloom low, and a 1280x720 or 1920x1080 screen.
 

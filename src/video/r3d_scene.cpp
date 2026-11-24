@@ -147,12 +147,10 @@ void R3DSceneBuilder::build(const R3DFrameState& state, R3DScene& out) {
     r3d_hide_wires(out);
     out.sky_dome_hidden = procedural_sky_ && r3d_hide_sky_dome(out);
     auto t3 = clock::now();
-    if (pack_ && texture_ram_ && pack_->active()) apply_texture_pack(out);
-    auto t4 = clock::now();
     link_previous(out);
     r3d_swt_explosions(out, viewport_instances_);   // adds vertices: after the pairing
-    auto t5 = clock::now();
-    stage_ms_[0] = ms(t0, t1), stage_ms_[1] = ms(t1, t2), stage_ms_[2] = ms(t2, t3), stage_ms_[3] = ms(t3, t4), stage_ms_[4] = ms(t4, t5);
+    auto t4 = clock::now();
+    stage_ms_[0] = ms(t0, t1), stage_ms_[1] = ms(t1, t2), stage_ms_[2] = ms(t2, t3), stage_ms_[3] = ms(t3, t4);
 }
 
 uint32_t R3DSceneBuilder::instance_key(uint32_t model_addr) {
@@ -382,19 +380,6 @@ uint32_t R3DSceneBuilder::KeyIndex::find(uint64_t key) const {
     for (uint32_t at = uint32_t((key * 0x9E3779B97F4A7C15ull) >> 32) & mask;; at = (at + 1) & mask) {
         if (vertex[at] == EMPTY) return EMPTY;
         if (keys[at] == key) return vertex[at];
-    }
-}
-
-// Marks every textured triangle with its replacement slot (0 = none)
-void R3DSceneBuilder::apply_texture_pack(R3DScene& out) {
-    frame_slots_.clear();
-    for (size_t i = 0; i + 2 < out.vertices.size(); i += 3) {
-        R3DVertex* tri = &out.vertices[i];
-        if (!(tri[0].flags & R3D_TEXTURED)) continue;
-        auto it = frame_slots_.find(tri[0].tex);
-        uint32_t slot = it != frame_slots_.end() ? it->second
-                                                 : (frame_slots_[tri[0].tex] = pack_->lookup(tri[0].tex, *texture_ram_));
-        tri[0].replace = tri[1].replace = tri[2].replace = slot;
     }
 }
 
@@ -785,7 +770,6 @@ void R3DSceneBuilder::model(uint32_t addr, const Mat& m, const Attribs& a) {
                     out[i].shade = v[i].shade;
                     out[i].fog = fog;
                     out[i].spec = spec_coef;
-                    out[i].replace = 0;
                 }
                 // Back-face test with the face normal (spec 5.4)
                 float fn[3];

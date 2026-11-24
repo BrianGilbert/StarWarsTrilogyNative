@@ -345,7 +345,6 @@ R3DVertex vertex(V3 pos, V3 prev, V3 nrm, float u, float v, Kind kind, uint32_t 
     o.shade = shade;
     o.fog = fog;
     o.spec = spec;
-    o.replace = 0;
     return o;
 }
 

@@ -461,9 +461,9 @@ bool VkPresenter::init(const char* title, int width, int height, bool with_ngx) 
         VkPhysicalDeviceFeatures2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
         query.pNext = &have;
         vkGetPhysicalDeviceFeatures2(gpu_, &query);
-        // Texture pack: an array of replacement images indexed per polygon. Not
-        // on every GPU (Mesa's v3dv on the Raspberry Pi 5): the renderer then
-        // goes without the replacement pictures (SWT_NO_DESCRIPTOR_INDEXING tries that here)
+        // The backdrop pictures (procedural skies): an array of images indexed
+        // per pixel. Not on every GPU (Mesa's v3dv on the Raspberry Pi 5): the
+        // renderer then goes without them (SWT_NO_DESCRIPTOR_INDEXING tries that here)
         descriptor_indexing_ = have.descriptorBindingPartiallyBound && have.descriptorBindingUpdateUnusedWhilePending &&
                                have.shaderSampledImageArrayNonUniformIndexing && !swt_env("SWT_NO_DESCRIPTOR_INDEXING");
         f12.descriptorBindingPartiallyBound = descriptor_indexing_;

@@ -75,37 +75,8 @@ void R3DTextureRam::store_level(int x, int y, int w, int h, const uint16_t* src,
             }
         }
     }
-    for (int by = (y & 2047) >> 5; by <= ((y & 2047) + h - 1) >> 5 && by < 64; by++)
-        for (int bx = x >> 5; bx <= (x + w - 1) >> 5; bx++) generation_[by * 64 + (bx & 63)]++;
     dirty_y0_ = std::min(dirty_y0_, y & 2047);
     dirty_y1_ = std::max(dirty_y1_, std::min(2048, (y & 2047) + h));
-}
-
-uint64_t R3DTextureRam::generation_locked(int x, int y, int w, int h) const {
-    uint64_t g = 0;
-    int page = y & 1024;
-    for (int yy = 0; yy < h; yy += 32)
-        for (int xx = 0; xx < w; xx += 32) {
-            int bx = ((x + xx) & 2047) >> 5, by = (page | ((y + yy) & 1023)) >> 5;
-            g = g * 31 + generation_[by * 64 + bx];
-        }
-    return g;
-}
-
-uint64_t R3DTextureRam::texture_generation(int x, int y, int w, int h) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return generation_locked(x, y, w, h);
-}
-
-uint64_t R3DTextureRam::read_texture(int x, int y, int w, int h, std::vector<uint16_t>& out) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    out.resize(size_t(w) * h);
-    int page = y & 1024;
-    for (int yy = 0; yy < h; yy++) {
-        const uint16_t* row = &texels_[size_t(page | ((y + yy) & 1023)) * 2048];
-        for (int xx = 0; xx < w; xx++) out[size_t(yy) * w + xx] = row[(x + xx) & 2047];
-    }
-    return generation_locked(x, y, w, h);
 }
 
 bool R3DTextureRam::take_dirty(std::vector<uint16_t>& out, int& y0, int& y1) {

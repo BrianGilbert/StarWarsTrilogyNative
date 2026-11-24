@@ -26,10 +26,9 @@
 
 class SkyPack {
 public:
-    // Slots of the 2D replacement pictures (compose.frag overlays[]) used for
-    // backdrops, counting down from the last one; Pack2D fills them from 1 up
-    // (replacement files from the first one up; procedural skies from the
-    // last one down, holding the original for the trees on the horizon)
+    // Slots of the backdrop pictures (compose.frag overlays[]): replacement
+    // files from the first one up; procedural skies from the last one down,
+    // holding the original for the trees on the horizon
     static constexpr uint32_t FIRST_SLOT = 56, LAST_SLOT = 63;
     static constexpr int SIZE = 512;
     // Colours of a procedural sky, from its original: per band of 16 rows the
