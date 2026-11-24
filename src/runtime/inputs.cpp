@@ -7,7 +7,7 @@
 #include <cstdlib>
 
 Inputs g_inputs;
-std::atomic<bool> g_select_aim{false}, g_fixed_aim{false};
+std::atomic<bool> g_fixed_aim{false};
 std::atomic<bool> g_swt_duel{false};
 std::atomic<int> g_duel_invert{0};
 std::atomic<int> g_swt_top_state{-1};
@@ -30,52 +30,28 @@ void set_player_aim(int player, float x, float y) {
     g_aim_x[player] = x;
     g_aim_y[player] = y;
     if (g_fixed_aim) return;
-    if (kAnalogJoystick) {
-        // The screen (0..1) spans the lever's whole travel (SWT_LEVER_RANGE
-        // scales it: below 1 the edges of the screen are out of reach)
-        static float range = [] {
-            const char* e = getenv("SWT_LEVER_RANGE");
-            float r = e ? float(atof(e)) : 1.0f;
-            return r > 0 ? r : 1.0f;
-        }();
-        // In the lightsaber duels the game turns the lever upside down (up
-        // and down, as a flight lever): put back, so the sight goes where the
-        // mouse, the stick or the light gun goes (left and right were right)
-        if (g_swt_duel) y = 1.0f - y;
-        // INVERT IN DUELS: some players find the duels' aim the wrong way
-        // round all the same (the regular levels are left as they are)
-        if (g_swt_duel) {
-            int inv = g_duel_invert;
-            if (inv & 1) x = 1.0f - x;
-            if (inv & 2) y = 1.0f - y;
-        }
-        float lx = 128 + (x - 0.5f) * 255 * range, ly = 128 + (y - 0.5f) * 255 * range;
-        if (player == 0) g_lever_exact[0] = lx, g_lever_exact[1] = ly;
-        g_inputs.p[player].gun_x = std::clamp(int(std::floor(lx + 0.5f)), 0, 255);
-        g_inputs.p[player].gun_y = std::clamp(int(std::floor(ly + 0.5f)), 0, 255);
-        return;
+    // The screen (0..1) spans the lever's whole travel (SWT_LEVER_RANGE
+    // scales it: below 1 the edges of the screen are out of reach)
+    static float range = [] {
+        const char* e = getenv("SWT_LEVER_RANGE");
+        float r = e ? float(atof(e)) : 1.0f;
+        return r > 0 ? r : 1.0f;
+    }();
+    // In the lightsaber duels the game turns the lever upside down (up
+    // and down, as a flight lever): put back, so the sight goes where the
+    // mouse, the stick or the light gun goes (left and right were right)
+    if (g_swt_duel) y = 1.0f - y;
+    // INVERT IN DUELS: some players find the duels' aim the wrong way
+    // round all the same (the regular levels are left as they are)
+    if (g_swt_duel) {
+        int inv = g_duel_invert;
+        if (inv & 1) x = 1.0f - x;
+        if (inv & 2) y = 1.0f - y;
     }
-    // Measured with --aim against the game's own marker, with the factory gun
-    // calibration (screen px = step * (adc - zero), all points within 1 px).
-    // The game maps the gun differently on the stage select screen (its dot,
-    // tools/find_crosshair.py, 13 positions) than in a stage (the X, read from
-    // --shot's out/scene.txt, 15 positions): 7% wider there.
-    struct Mapping { float step_x, zero_x, step_y, zero_y; };
-    static const Mapping STAGE{2.404f, 15.14f, 1.806f, 3.68f}, SELECT{2.569f, 21.84f, 1.954f, 11.52f};
-    const Mapping& m = g_select_aim ? SELECT : STAGE;
-    const float W = 496, H = 384;   // the game screen
-    float ax = m.zero_x + x * W / m.step_x, ay = m.zero_y + y * H / m.step_y;   // player 1's gun
-    if (player == 1) {
-        // Player 2's gun has its own factory calibration: in a stage its X
-        // sits at screen px = step * (adc - zero) with these values (fitted to
-        // the game's marker at ADC 60, 128 and 200 / 60, 128 and 180, within
-        // 2 px); the same correction applies to the stage select mapping
-        static const Mapping P2_STAGE{2.349f, 18.84f, 1.818f, 0.03f};
-        ax = P2_STAGE.zero_x + (ax - STAGE.zero_x) * STAGE.step_x / P2_STAGE.step_x;
-        ay = P2_STAGE.zero_y + (ay - STAGE.zero_y) * STAGE.step_y / P2_STAGE.step_y;
-    }
-    g_inputs.p[player].gun_x = std::clamp(int(ax + 0.5f), 0, 255);
-    g_inputs.p[player].gun_y = std::clamp(int(ay + 0.5f), 0, 255);
+    float lx = 128 + (x - 0.5f) * 255 * range, ly = 128 + (y - 0.5f) * 255 * range;
+    if (player == 0) g_lever_exact[0] = lx, g_lever_exact[1] = ly;
+    g_inputs.p[player].gun_x = std::clamp(int(std::floor(lx + 0.5f)), 0, 255);
+    g_inputs.p[player].gun_y = std::clamp(int(std::floor(ly + 0.5f)), 0, 255);
 }
 
 PlayerAim player_aim(int player) {
@@ -89,17 +65,9 @@ int pad_player(int pad, uint32_t connected) {
     return below ? 1 : 0;
 }
 
-// player_join: coin held for 100 ms, then start for 100 ms after a pause, so
-// the game sees each press on its own (it reads the buttons at 57.5 Hz)
-static double g_join_at[2] = {-1, -1};
-
 static double now_seconds() {
     using namespace std::chrono;
     return duration<double>(steady_clock::now().time_since_epoch()).count();
-}
-
-void player_join(int player) {
-    if (g_join_at[player] < 0) g_join_at[player] = now_seconds();
 }
 
 // A button held for 0.1 s (a pad's BACK = coin, START = start)
@@ -111,14 +79,6 @@ void join_update() {
     double now = now_seconds();
     if (g_coin_at >= 0 && now - g_coin_at < 0.1) g_inputs.p[0].coin = true;
     if (g_start_at >= 0 && now - g_start_at < 0.1) g_inputs.p[0].start = true;
-    for (int p = 0; p < 2; p++) {
-        if (g_join_at[p] < 0) continue;
-        double t = now - g_join_at[p];
-        // Credits are shared: the coin goes in slot 1, as the "5" key does
-        if (t < 0.1) g_inputs.p[0].coin = true;
-        else if (t >= 0.25 && t < 0.35) g_inputs.p[p].start = true;
-        else if (t >= 0.45) g_join_at[p] = -1;
-    }
 }
 
 void AutoInput::parse(const std::string& s) {

@@ -1,21 +1,18 @@
 // Player controls. Written by the window (keyboard/mouse), the pads or by
-// --auto, and read by the emulated hardware at 0xF0040000. The cabinet has two
-// guns: p[0] is player 1 and p[1] player 2.
+// --auto, and read by the emulated hardware at 0xF0040000. Star Wars Trilogy
+// has one analog flight lever: p[0] is the player; p[1] only has the second
+// coin slot and start button the I/O board still reads.
 #pragma once
 #include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-// Star Wars Trilogy: one analog flight lever instead of LW's two guns.
 // gun_x/gun_y hold the lever's ADC values (0x80 = centred), trigger is the
-// lever's trigger and offscreen its second (thumb) button.
-constexpr bool kAnalogJoystick = true;
-
+// lever's trigger and offscreen its second (thumb) button
 struct PlayerInputs {
     std::atomic<bool> coin{false}, start{false}, trigger{false}, offscreen{false}, event{false};
     std::atomic<int> gun_x{128}, gun_y{128};   // raw ADC values, 0..255
-    std::atomic<bool> playing{false};          // in the game (set by the game thread from its RAM)
 };
 
 struct Inputs {
@@ -37,35 +34,26 @@ struct Inputs {
         }
         return v;
     }
-    // F0040008 player 1, F004000C player 2: bit0 trigger, bit1 second trigger (used to reload)
-    // With the lever (kAnalogJoystick): F0040008 bit5 trigger 1, bit4 trigger 2, bit0 event button
-    uint8_t player_port(int player) const {
+    // F0040008: bit5 the lever's trigger, bit4 its second trigger, bit0 the
+    // event button (the second player's port, F004000C, is not read here)
+    uint8_t player_port() const {
         uint8_t v = 0xFF;
-        if (kAnalogJoystick) {
-            if (player == 0 && p[0].trigger) v &= ~0x20;
-            if (player == 0 && p[0].offscreen) v &= ~0x10;
-            if (player == 0 && p[0].event) v &= ~0x01;
-            return v;
-        }
-        if (p[player].trigger) v &= ~0x01;
-        if (p[player].offscreen) v &= ~0x02;
+        if (p[0].trigger) v &= ~0x20;
+        if (p[0].offscreen) v &= ~0x10;
+        if (p[0].event) v &= ~0x01;
         return v;
     }
-    // ADC channels: 0 = P1 X, 1 = P1 Y, 2 = P2 X, 3 = P2 Y (raw values; the window maps the mouse)
-    // With the lever: channel 0 = lever Y, 1 = lever X
+    // ADC channels: 0 = lever Y, 1 = lever X (raw values; the window maps the mouse)
     uint8_t adc(int channel) const {
-        if (kAnalogJoystick) return channel == 0 ? uint8_t(p[0].gun_y) : channel == 1 ? uint8_t(p[0].gun_x) : 0x80;
-        if (channel >= 4) return 0;
-        const PlayerInputs& pl = p[channel >> 1];
-        return uint8_t(channel & 1 ? pl.gun_y : pl.gun_x);
+        return channel == 0 ? uint8_t(p[0].gun_y) : channel == 1 ? uint8_t(p[0].gun_x) : 0x80;
     }
 };
 
 extern Inputs g_inputs;
 
-// Aim of a player as a fraction of the 4:3 game screen (outside 0..1 = off
-// the screen): sets that gun's ADC values and keeps it for the crosshair.
-// The mouse, the second mouse and the pads all aim through here.
+// Aim of a player as a fraction of the screen (outside 0..1 = off the
+// screen): sets the lever's ADC values (player 1's; a second pad's aim is
+// kept but read by nothing). The mouse and the pads all aim through here.
 void set_player_aim(int player, float x, float y);
 // Star Wars Trilogy: the shakes of the lever's force feedback since the
 // pads last took them (0..1; runtime.cpp, from the drive board's motors)
@@ -81,7 +69,6 @@ PlayerAim player_aim(int player);
 // is from the 0..255 step the game reads (-0.5..0.5; 0 at the ends or when
 // something else set the lever)
 float lever_fraction(int axis);
-extern std::atomic<bool> g_select_aim;   // the stage select screen is up (its gun mapping differs)
 extern std::atomic<bool> g_fixed_aim;    // --aim: the ADC values stay fixed
 
 // Which player a pad controls (0 or 1), given the connected pads as a bit
@@ -89,10 +76,8 @@ extern std::atomic<bool> g_fixed_aim;    // --aim: the ADC values stay fixed
 // was plugged in, and the others are player 2's
 int pad_player(int pad_index, uint32_t connected);
 
-// Joining a game in progress: a credit and then that player's start, as the
-// arcade asks for. Driven by the clock, so whoever polls the controls (the
-// window at the monitor's rate) calls join_update() each time.
-void player_join(int player);
+// A pad's coin / start, held for 0.1 s: driven by the clock, so whoever polls
+// the controls (the window at the monitor's rate) calls join_update() each time
 void join_update();
 void press_coin();    // player 1's coin / start for 0.1 s (pads)
 void press_start();

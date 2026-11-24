@@ -72,8 +72,6 @@ public:
     // Sees key presses and mouse messages first; returning true swallows
     // them (Esc then no longer closes the window)
     std::function<bool(UINT msg, WPARAM wp, LPARAM lp)> input_hook;
-    // WM_INPUT (raw input registered by the owner), with its HRAWINPUT
-    std::function<void(HRAWINPUT input)> raw_input;
     // Arrow pointer over the window instead of none (menus); takes effect at
     // once, without waiting for the mouse to move
     void set_cursor_visible(bool visible);

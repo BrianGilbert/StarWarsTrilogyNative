@@ -347,8 +347,8 @@ uint8_t dev_read8(uint32_t a) {
         return bank1 ? uint8_t((v & 0xDF) | (g_eeprom.read_do() << 5)) : v;
     }
     // Player buttons: active low, 0xFF = nothing pressed
-    if (a == 0xF0040008) return g_inputs.player_port(0);
-    if (a == 0xF004000C) return g_drive.reply();   // force feedback board reply (Lost World: player 2 buttons)
+    if (a == 0xF0040008) return g_inputs.player_port();
+    if (a == 0xF004000C) return g_drive.reply();   // force feedback board reply
     if (a == 0xF0040018) return 0x7F;
     if (a == 0xF0040034) return 0x00;   // serial FIFO flags (no light gun board)
     if (a == 0xF004003C) {              // ADC: gun position, channel auto-increments

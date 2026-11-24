@@ -111,48 +111,45 @@ void R3DSceneBuilder::build(const R3DFrameState& state, R3DScene& out) {
     std::stable_sort(out.viewports.begin(), out.viewports.end(),
                      [](const R3DViewport& a, const R3DViewport& b) { return a.priority < b.priority; });
     if (remove_letterbox_) r3d_strip_letterbox(out);
-    if (hud_edges_) r3d_anchor_hud(out);
-    if (share_world_) {
-        // Star Wars Trilogy: the shadows of C-3PO and R2-D2 on the floor at the
-        // end of Hoth's base are the actors again, flattened onto the floor, in
-        // a viewport with no light at all (black). r3d_share_world gives that
-        // viewport the world's light, as the same viewport draws the actors too
-        // (issue #15), so the flattened copies are made black first (issue #59)
-        for (const R3DViewport& v : out.viewports) {
-            if (v.sun_intensity > 0 || v.ambient > 0 || v.build_index >= viewport_instances_.size()) continue;
-            for (const R3DInstance& in : viewport_instances_[v.build_index]) {
-                if (!in.flat) continue;
-                auto black = [&](uint32_t first, const uint32_t* range) {
-                    for (uint32_t i = range[0]; i < range[1]; i++) {
-                        R3DVertex& x = out.vertices[first + i];
-                        x.color &= 0xFF000000u;
-                        x.flags &= ~R3D_SPECULAR;
-                    }
-                };
-                black(v.opaque_first, in.opaque);
-                black(v.trans_first, in.trans);
-            }
+    // Star Wars Trilogy: the shadows of C-3PO and R2-D2 on the floor at the
+    // end of Hoth's base are the actors again, flattened onto the floor, in
+    // a viewport with no light at all (black). r3d_share_world gives that
+    // viewport the world's light, as the same viewport draws the actors too
+    // (issue #15), so the flattened copies are made black first (issue #59)
+    for (const R3DViewport& v : out.viewports) {
+        if (v.sun_intensity > 0 || v.ambient > 0 || v.build_index >= viewport_instances_.size()) continue;
+        for (const R3DInstance& in : viewport_instances_[v.build_index]) {
+            if (!in.flat) continue;
+            auto black = [&](uint32_t first, const uint32_t* range) {
+                for (uint32_t i = range[0]; i < range[1]; i++) {
+                    R3DVertex& x = out.vertices[first + i];
+                    x.color &= 0xFF000000u;
+                    x.flags &= ~R3D_SPECULAR;
+                }
+            };
+            black(v.opaque_first, in.opaque);
+            black(v.trans_first, in.trans);
         }
-        r3d_share_world(out);
-        r3d_find_glows(out, viewport_instances_);
-        // The star field's orientation, from its biggest model
-        for (const R3DViewport& v : out.viewports) {
-            if (!v.stars || v.build_index >= viewport_instances_.size()) continue;
-            const R3DInstance* big = nullptr;
-            for (const R3DInstance& in : viewport_instances_[v.build_index])
-                if (!big || in.polygons > big->polygons) big = &in;
-            if (big) memcpy(out.star_axes, big->axes, sizeof(out.star_axes));
-        }
-        r3d_widen_screen_fills(out, std::max(fov_widened_, view_wide_));
-        r3d_anchor_swt_hud(out);
-        r3d_hide_wires(out);
-        out.sky_dome_hidden = procedural_sky_ && r3d_hide_sky_dome(out);
     }
+    r3d_share_world(out);
+    r3d_find_glows(out, viewport_instances_);
+    // The star field's orientation, from its biggest model
+    for (const R3DViewport& v : out.viewports) {
+        if (!v.stars || v.build_index >= viewport_instances_.size()) continue;
+        const R3DInstance* big = nullptr;
+        for (const R3DInstance& in : viewport_instances_[v.build_index])
+            if (!big || in.polygons > big->polygons) big = &in;
+        if (big) memcpy(out.star_axes, big->axes, sizeof(out.star_axes));
+    }
+    r3d_widen_screen_fills(out, std::max(fov_widened_, view_wide_));
+    r3d_anchor_swt_hud(out);
+    r3d_hide_wires(out);
+    out.sky_dome_hidden = procedural_sky_ && r3d_hide_sky_dome(out);
     auto t3 = clock::now();
     if (pack_ && texture_ram_ && pack_->active()) apply_texture_pack(out);
     auto t4 = clock::now();
     link_previous(out);
-    if (share_world_) r3d_swt_explosions(out, viewport_instances_);   // adds vertices: after the pairing
+    r3d_swt_explosions(out, viewport_instances_);   // adds vertices: after the pairing
     auto t5 = clock::now();
     stage_ms_[0] = ms(t0, t1), stage_ms_[1] = ms(t1, t2), stage_ms_[2] = ms(t2, t3), stage_ms_[3] = ms(t3, t4), stage_ms_[4] = ms(t4, t5);
 }
@@ -615,7 +612,7 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
         float f = e ? float(atof(e)) : 1.4f;   // (2 hung the window in the trench: too many polygons)
         return f > 0.1f ? f : 1.0f;
     }();
-    float lod_scale = (a.no_cull || no_lod || dist == 0) ? 1e30f : std::max(0.0f, blend_r / dist) * (share_world_ ? lod_far : 1.0f);
+    float lod_scale = (a.no_cull || no_lod || dist == 0) ? 1e30f : std::max(0.0f, blend_r / dist) * lod_far;
     float del[4], fac[4];
     for (int k = 0; k < 4; k++) {
         del[k] = rd_.cullf(lod_base_ + lod_index * 8 + k * 2);
@@ -641,7 +638,7 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
         // Star Wars Trilogy: the detail fades in over a stretch four times as
         // long (the trench's raised panels popped in), over the plainer model
         // kept solid under it (both see-through, the trench showed holes)
-        bool soft = share_world_ && lod_fade > 1.0f;
+        bool soft = lod_fade > 1.0f;
         float fade = std::clamp(fac[k] / (soft ? lod_fade : 1.0f) * (lod_scale - del[k]), 0.0f, 1.0f);
         if (no_lod || a.no_cull || fade > 31.0f / 32.0f) fade = 1;
         else if (fade < 1.0f / 32.0f) fade = 0;
@@ -657,7 +654,7 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
         if (fade < 1 && k != 3) visit(entry[k + 1], soft ? parent_alpha : parent_alpha * (1 - fade));
     } else {
         // (Star Wars Trilogy: softer too, as above)
-        float stretch = share_world_ && lod_fade > 1.0f ? lod_fade : 1.0f;
+        float stretch = lod_fade > 1.0f ? lod_fade : 1.0f;
         if (!no_lod && !a.no_cull) a.alpha *= std::clamp(fac[3] / stretch * (lod_scale - del[3]), 0.0f, 1.0f);
         node_ptr(child, m, a, depth + 1);
     }

@@ -241,7 +241,7 @@ if(UNIX AND NOT APPLE)
         ${MAC_DIR}/display_mac.cpp
         ${LINUX_DIR}/image_io_linux.cpp
         ${LINUX_DIR}/splash_video_linux.cpp
-        ${MAC_DIR}/raw_mice_mac.cpp
+        ${MAC_DIR}/mouse_confine_mac.cpp
         ${MAC_DIR}/audio_out_mac.cpp
         src/video/dlss_stub.cpp
         src/ui/menu_music.cpp)
@@ -250,7 +250,7 @@ elseif(APPLE)
         ${MAC_DIR}/win32_mac.mm
         ${MAC_DIR}/vk_window_mac.cpp
         ${MAC_DIR}/display_mac.cpp
-        ${MAC_DIR}/raw_mice_mac.cpp
+        ${MAC_DIR}/mouse_confine_mac.cpp
         ${MAC_DIR}/audio_out_mac.cpp
         ${MAC_DIR}/dlss_mac.cpp
         ${MAC_DIR}/image_io_mac.mm
@@ -258,7 +258,7 @@ elseif(APPLE)
         ${MAC_DIR}/splash_video_mac.mm)
 else()
     set(PLATFORM_SOURCES
-        src/runtime/raw_mice.cpp
+        src/runtime/mouse_confine.cpp
         src/audio/audio_out.cpp
         ${DLSS_SOURCE}
         src/ui/menu_music.cpp

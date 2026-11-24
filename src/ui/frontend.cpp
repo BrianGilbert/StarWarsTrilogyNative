@@ -344,10 +344,10 @@ const wchar_t* const Frontend::TAB_NAMES[Frontend::TAB_COUNT] = {L"EXPERIENCE", 
 // Every settings option: its section, within the section the order shown, and
 // the heading of each group of rows (on its first one). This is the one place
 // to put a new option (besides `all` in items()); an option missing here is
-// not shown: the Lost World ones (HD text, crosshair, second mouse) and those
-// that changed nothing in Star Wars when measured on snapshots of Yavin, Hoth
-// and Endor (tools/option_sweep.py: procedural sky, light shafts, soft
-// particles, surface detail). Their settings.ini keys stay. A section whose
+// not shown: HD text (from Lost World) and those that changed nothing in Star
+// Wars when measured on snapshots of Yavin, Hoth and Endor
+// (tools/option_sweep.py: procedural sky, light shafts, soft particles,
+// surface detail). Their settings.ini keys stay. A section whose
 // rows do not fit the page scrolls.
 const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_EXPERIENCE, EXPERIENCE_TAB, L"EDITION"}, {OPT_ARCADE_ASPECT, EXPERIENCE_TAB},

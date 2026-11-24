@@ -49,7 +49,6 @@ struct Options {
     bool shadows = true;             // --no-shadows: no sun shadows
     int ray_tracing = 2;             // --rt off|shadows|ao (--no-rt): traced sun shadows (1) and ambient occlusion (2)
     bool sun = true;                 // --no-sun: no sun in the procedural sky
-    bool show_crosshair = true;      // menu option; the C key toggles it
     bool explosions = true;          // --explosions arcade|enhanced: Star Wars Trilogy's new fireballs, sparks and debris (Yavin)
     // Sound
     float volume = 5.0f;             // --volume: output gain
@@ -58,7 +57,6 @@ struct Options {
     int rear_boost = 6;              // --rear-boost: extra dB on the rear pair (0, 3, 6, 9, 12)
     bool cubic_samples = true;       // --linear-samples: the SCSP's own linear interpolation instead of cubic
     std::string wav_path;            // --wav: record the sound output
-    bool several_mice = true;        // a second mouse is player 2's gun (--one-mouse: all move player 1's)
     // Debugging and tests
     uint64_t shot_frame = 0;         // --shot N: screenshot of frame N, then exit
     std::string replay;              // --replay: a debug snapshot (or a folder of them) instead of the game

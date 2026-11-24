@@ -300,13 +300,12 @@ void Gamepads::poll(const GamepadSettings& set, bool focused, bool menu) {
         } else {
             s.dir = -1;
             st.fire = rt || down(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) || down(SDL_GAMEPAD_BUTTON_SOUTH);
-            st.reload = lt || down(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) || down(SDL_GAMEPAD_BUTTON_EAST) ||
-                        (!kAnalogJoystick && down(SDL_GAMEPAD_BUTTON_WEST));
-            st.event = kAnalogJoystick && down(SDL_GAMEPAD_BUTTON_WEST);   // Star Wars' EVENT button: X
+            st.reload = lt || down(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) || down(SDL_GAMEPAD_BUTTON_EAST);
+            st.event = down(SDL_GAMEPAD_BUTTON_WEST);   // Star Wars' EVENT button: X
             st.start = pressed(SDL_GAMEPAD_BUTTON_START);
             st.back = pressed(SDL_GAMEPAD_BUTTON_BACK);
             // Sticks: screen widths per second, up to 70% faster after a moment at full tilt
-            float speed = (kAnalogJoystick ? 1.8f : 1.3f) * speed_step(set.stick_speed, 4.0f);   // the sight crosses more of the screen here
+            float speed = 1.8f * speed_step(set.stick_speed, 4.0f);   // the sight crosses the whole (wider) view
             s.full_tilt = tilt >= 1.0f ? s.full_tilt + dt : 0.0f;
             speed *= 1.0f + 0.7f * std::clamp((s.full_tilt - 0.12f) / 0.3f, 0.0f, 1.0f);
             float dx = ax * speed * dt, dy = ay * speed * dt * SCREEN_ASPECT;
@@ -326,16 +325,16 @@ void Gamepads::poll(const GamepadSettings& set, bool focused, bool menu) {
             // By default the sticks move the sight as in Lost World and the lever
             // follows it (the sight stays where it is left)
             static const bool absolute_env = getenv("SWT_PAD_ABSOLUTE") != nullptr;
-            if (kAnalogJoystick && (set.lever || absolute_env)) {
+            if (set.lever || absolute_env) {
                 float lvx = 0, lvy = 0;
                 for (auto [axx, axy] : {std::pair{SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY},
                                         std::pair{SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY}}) {
                     float sx = float(SDL_GetGamepadAxis(p, axx)) / 32767.0f, sy = float(SDL_GetGamepadAxis(p, axy)) / 32767.0f;
                     float m = std::sqrt(sx * sx + sy * sy);
                     if (m < STICK_DEAD) continue;
-                    float t = std::min((m - STICK_DEAD) / (0.95f - STICK_DEAD), 1.0f);   // full a little before the edge
-                    t *= 0.2f + 0.8f * t;   // gentle near the centre, still the whole travel at the edge
-                    lvx += sx / m * t * inv_x, lvy += sy / m * t * inv_y;
+                    float amount = std::min((m - STICK_DEAD) / (0.95f - STICK_DEAD), 1.0f);   // full a little before the edge
+                    amount *= 0.2f + 0.8f * amount;   // gentle near the centre, still the whole travel at the edge
+                    lvx += sx / m * amount * inv_x, lvy += sy / m * amount * inv_y;
                 }
                 // A real lever takes a moment to swing over: the position follows
                 // the stick at most LEVER_SPEED per second (centre to side in 1/6 s
@@ -403,8 +402,8 @@ void Gamepads::poll_joystick(Slot& s, PadState& st, const GamepadSettings& set, 
     } else {
         s.dir = -1;
         st.fire = now_down[0];
-        st.reload = now_down[1] || (!kAnalogJoystick && now_down[2]);
-        st.event = kAnalogJoystick && now_down[2];
+        st.reload = now_down[1];
+        st.event = now_down[2];
         st.back = pressed(3);
         st.start = pressed(4);
         if (set.invert & 1) x = -x;

@@ -132,8 +132,6 @@ const std::vector<Entry>& table() {
         num("--rear-boost", &Options::rear_boost, "extra dB on the rear speakers (roars and effects; 6)"),
         off("--linear-samples", &Options::cubic_samples, "linear interpolation of the samples, like the original SCSP"),
         text("--wav", "FILE", &Options::wav_path, "record the sound to a WAV"),
-        section("Players"),
-        off("--one-mouse", &Options::several_mice, "every mouse moves player 1's gun (no second mouse)"),
         section("Debugging and tests"),
         custom("--shot", "N", "save frame N to out/capture.bmp and the scene to out/scene.txt, then exit", true,
                [](Options& o, const char* v) { o.shot_frame = strtoull(v, nullptr, 10); }),
