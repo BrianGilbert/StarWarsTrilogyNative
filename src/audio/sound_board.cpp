@@ -233,7 +233,6 @@ void SoundBoard::run_frame(double frame_hz) {
             for (int c = 0; c < AudioStream::kInChannels; c++) f[c] *= k;
         }
         out_->push(buffer_.data(), size_t(samples));   // the output keeps the latency bounded
-        frames_out_ += uint64_t(samples);
     }
 }
 

@@ -31,7 +31,6 @@ public:
     // Replacements loaded since the last call, to be uploaded by the renderer
     std::vector<RgbaImage> take_new_images();
 
-    size_t replaced_count() const { return slots_.size(); }
     // Fewer slots than MAX_SLOTS, when the GPU cannot bind them all (R3DRenderer::replacement_slots)
     void set_slot_limit(uint32_t slots) { slot_limit_ = std::min(slots, MAX_SLOTS); }
 

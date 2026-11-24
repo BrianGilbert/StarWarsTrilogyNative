@@ -282,7 +282,6 @@ add_executable(StarWarsTrilogy WIN32
     third_party/z80/z80.c
     src/runtime/inputs.cpp
     src/runtime/gamepad.cpp
-    src/runtime/scsi53c810.cpp
     src/runtime/stats.cpp
     src/runtime/achievements_csv.cpp
     src/ui/achievement_toast.cpp

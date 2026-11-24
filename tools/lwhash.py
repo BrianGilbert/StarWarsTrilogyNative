@@ -1,6 +1,6 @@
 """FNV-1a, 64 bits, as src/common/fnv1a.h computes it: the names of the
-texture pack images, the 2D replacement cells, the backdrops (make_backdrop.py)
-and the text glyphs (make_text_atlas.py) come from it. tests/fnv_test.py
+texture pack images, the 2D replacement cells and the text glyphs
+(make_text_atlas.py) come from it. tests/fnv_test.py
 checks that this file and the C++ header agree."""
 
 BASIS = 0xcbf29ce484222325

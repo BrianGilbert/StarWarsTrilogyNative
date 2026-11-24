@@ -5,48 +5,20 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <deque>
-#include <future>
-#include <memory>
 #include <mutex>
-#include <string>
-#include <thread>
 #include <vector>
-
-#include <dwmapi.h>     // DwmGetCompositionTimingInfo
-#include <mmsystem.h>   // timeBeginPeriod
-#include <windowsx.h>   // GET_X_LPARAM
 
 #include "gamepad.h"
 #include "inputs.h"
 #include "options.h"
-#include "ppc_rt.h"
 #include "raw_mice.h"
-#include "rom_zip.h"
 #include "runtime.h"
-#include "stats.h"
-#include "../audio/sound_board.h"
-#include "../ui/achievement_toast.h"
-#include "../ui/frontend.h"
-#include "../ui/menu_music.h"
-#include "../video/pack2d.h"
 #include "../video/r3d_renderer.h"
 #include "../video/r3d_scene.h"
-#include "../video/r3d_screen.h"
-#include "../video/r3d_state.h"
-#include "../video/sky_pack.h"
-#include "../video/text_hd.h"
-#include "../video/texture_pack.h"
 #include "../video/tilegen.h"
-#include "../video/ui_overlay.h"
-#include "../video/vk_presenter.h"
-
 
 #include "app_internal.h"
 

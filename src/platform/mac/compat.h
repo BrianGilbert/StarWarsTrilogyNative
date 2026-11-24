@@ -16,7 +16,6 @@ static inline unsigned char _BitScanReverse(unsigned long* i, uint32_t v) {
 }
 static inline int __popcnt(uint32_t v) { return __builtin_popcount(v); }
 static inline int localtime_s(struct tm* out, const time_t* t) { return localtime_r(t, out) ? 0 : 1; }
-static inline int _wcsicmp(const wchar_t* a, const wchar_t* b) { return wcscasecmp(a, b); }
 extern "C" char** environ;
 #define _environ environ
 #endif

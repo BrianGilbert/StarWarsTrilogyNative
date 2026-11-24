@@ -22,10 +22,10 @@ static int g_failed = 0;
 static bool close_to(float a, float b) { return std::fabs(a - b) < 1e-4f; }
 
 // Parses a list of arguments; returns whether the game would run
-static bool parse(Options& o, std::vector<const char*> args, int* code = nullptr, ExtraOption extra = nullptr) {
+static bool parse(Options& o, std::vector<const char*> args, int* code = nullptr) {
     args.insert(args.begin(), "StarWarsTrilogy.exe");
     int exit_code = -1;
-    bool run = parse_options(o, int(args.size()), const_cast<char**>(args.data()), extra, exit_code);
+    bool run = parse_options(o, int(args.size()), const_cast<char**>(args.data()), exit_code);
     if (code) *code = exit_code;
     return run;
 }
@@ -132,33 +132,11 @@ int main() {
         CHECK(!parse(o, {"--help"}, &code) && code == 0);
         CHECK(!parse(o, {"--shot", "1", "-h"}, &code) && code == 0);
     }
-    {   // options of another module through the fallback
-        std::vector<std::string> seen;
-        ExtraOption extra = [&](Options& o, const std::string& name, const char* next) -> int {
-            if (name == "--arena") {
-                seen.push_back(next ? next : "(none)");
-                return 2;
-            }
-            if (name == "--trace-arena") {
-                o.menu = false;
-                return 1;
-            }
-            return 0;
-        };
-        Options o;
-        CHECK(parse(o, {"--arena", "2:3", "--trace-arena", "--msaa", "2"}, nullptr, extra));
-        CHECK(seen.size() == 1 && seen[0] == "2:3" && !o.menu && o.msaa == 2);
-        int code = -1;
-        CHECK(!parse(o, {"--other"}, &code, extra) && code == 1);
-    }
     {   // test runs leave the menu out
         const char* a1[] = {"x", "--bloom", "1.6", "--shot", "1400"};
         const char* a2[] = {"x", "--bloom", "1.6", "--no-hdr"};
-        const char* a3[] = {"x", "--trace-arena"};
         CHECK(options_disable_menu(5, const_cast<char**>(a1)));
         CHECK(!options_disable_menu(4, const_cast<char**>(a2)));
-        CHECK(!options_disable_menu(2, const_cast<char**>(a3)));
-        CHECK(options_disable_menu(2, const_cast<char**>(a3), {"--trace-arena"}));
     }
     if (g_failed) {
         printf("options: %d checks failed\n", g_failed);
