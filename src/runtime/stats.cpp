@@ -286,8 +286,6 @@ struct Tracker {
         int md = rd8(MODE);
         uint32_t st = rd32(TOP_STATE);
         bool playing = swt_playing();
-        g_swt_duel = playing && st >= 10 && st <= 13 && !getenv("SWT_DUEL_ORIGINAL");
-        g_swt_top_state = playing ? int(st) : -1;
         int de = int16_t(rd16(P_DESTROYED)), ap = int16_t(rd16(P_APPEARED)), sh = int16_t(rd16(P_SHIELD));
         int score = int(rd32(P_SCORE));
         std::lock_guard<std::mutex> lock(mutex);
@@ -361,7 +359,6 @@ void stats_init() {
     write_achievements_json(g.stats, g.unlocked);   // for the launcher, from the first launch of a new build
     g.on = true;
     g.rebase = true;
-    for (uint32_t fn : FN_RESULTS) g_trace_bits[(fn >> 5) & 511] |= uint8_t(1 << ((fn >> 2) & 7));
 }
 
 // (at exit: also waits for every file still being written, the EEPROM's too)
@@ -387,16 +384,29 @@ std::vector<int> stats_take_new_achievements() {
     return r;
 }
 
+// The game's state for the rest of the port, on every run, menu or not
+// (--no-menu, ARCADE ORIGINAL, tests): the lever turned round in the duels,
+// the widescreen HUD, the scene's per-stage tags and the enhanced explosions
+// all read it. Only the records and achievements wait for stats_init.
 void stats_frame() {
+    static bool hooked = false;
+    if (!hooked) {   // the phase results (stats_enter), on the game thread before the game's first frame ends
+        hooked = true;
+        for (uint32_t fn : FN_RESULTS) g_trace_bits[(fn >> 5) & 511] |= uint8_t(1 << ((fn >> 2) & 7));
+    }
+    static const bool duel_original = getenv("SWT_DUEL_ORIGINAL") != nullptr;
+    bool playing = swt_playing();
+    uint32_t st = rd32(TOP_STATE);
+    g_swt_duel = playing && st >= 10 && st <= 13 && !duel_original;
+    g_swt_top_state = playing ? int(st) : -1;
     if (g.on) g.frame_tick();
 }
 
 void stats_enter(Ctx& c, uint32_t fn) {
-    if (!g.on) return;
     for (uint32_t f : FN_RESULTS)
         if (fn == f) {
             g_swt_phase_results++;   // the widescreen HUD lets go for the results screen (app.cpp)
-            g.phase_end(int(c.r[3]));
+            if (g.on) g.phase_end(int(c.r[3]));
         }
 }
 
