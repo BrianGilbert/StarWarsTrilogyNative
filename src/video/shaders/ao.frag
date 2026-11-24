@@ -70,7 +70,7 @@ void main() {
     // Fogged surfaces lose their shading, so they lose the occlusion too
     float fog = clamp(ao.params.w + (-p.z) * ao.params.z, 0.0, 1.0);
 #ifdef RAY_TRACING
-    // misc.w 1: traced on the left half only, for comparing (LW_RTSPLIT)
+    // misc.w 1: traced on the left half only, for comparing (SWT_RTSPLIT)
     if (ao.misc.z > 0.0 && (ao.misc.w == 0.0 || frag.x < ao.rect.x + ao.rect.z * 0.5)) {
         out_ao = vec4(mix(1.0, traced_open(p, n, noise), 1.0 - fog));
         return;

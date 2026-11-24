@@ -8,6 +8,7 @@
 #include <tuple>
 
 #include "r3d_scene.h"
+#include "../runtime/env_switches.h"
 
 // Finds the viewport showing the game world and the camera position in a
 // fixed world frame, for the atmosphere. The orientation shared by most
@@ -248,7 +249,7 @@ void R3DWorldTracker::track(const std::vector<std::vector<R3DInstance>>& viewpor
         // Star Wars Trilogy: off. Its big models (the planets, the Death Star)
         // are built from pieces the game swaps as the camera moves, and each
         // swapped piece faded in from the black of space as a hole
-        static const bool appear_fade = getenv("SWT_APPEAR_FADE") != nullptr;
+        static const bool appear_fade = swt_env_on("SWT_APPEAR_FADE");
         if (now.fade <= 0 || !appear_fade) continue;
         appearing++;
         uint32_t code = uint32_t(now.fade * 255.0f + 0.5f) << R3D_FADE_IN_SHIFT;
@@ -327,7 +328,7 @@ void R3DWorldTracker::track(const std::vector<std::vector<R3DInstance>>& viewpor
         for (uint32_t i = in.opaque[0]; i < in.opaque[1]; i++) out.vertices[v.opaque_first + i].flags |= R3D_ACTOR;
         for (uint32_t i = in.trans[0]; i < in.trans[1]; i++) out.vertices[v.trans_first + i].flags |= R3D_ACTOR;
     }
-    static const bool debug = getenv("LW_FOGDBG") != nullptr;   // debugging aid
+    static const bool debug = swt_env_on("SWT_FOGDBG");   // debugging aid
     if (debug)
         printf("[fog] frame %llu camera %.1f %.1f %.1f ground %.1f (height %.1f) far %.0f agree %d/%d models %zu "
                "polygons %u grounds %zu appearing %zu\n",

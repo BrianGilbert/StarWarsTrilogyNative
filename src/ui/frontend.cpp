@@ -15,6 +15,7 @@
 
 #ifndef _WIN32
 #include "../video/image_io.h"
+#include "../runtime/env_switches.h"
 #endif
 
 namespace {
@@ -428,7 +429,7 @@ std::vector<Frontend::Item> Frontend::items() const {
         // DEBUG is for testing only: shown while the port is being tested;
         // for the release kShowDebugMenu goes false (SWT_DEBUG_MENU still shows it)
         constexpr bool kShowDebugMenu = false;
-        static const bool debug_menu = kShowDebugMenu || getenv("SWT_DEBUG_MENU") != nullptr;
+        static const bool debug_menu = kShowDebugMenu || swt_env_on("SWT_DEBUG_MENU");
         if (debug_menu) list.insert(list.begin() + 1, {DEBUG, L"DEBUG", L"", L"Straight to any phase of any stage (for testing)"});
         return list;
     }

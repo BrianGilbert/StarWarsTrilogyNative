@@ -100,7 +100,7 @@ public:
         timing_ = Timing{};
         return t;
     }
-    // The last frame() alone, in seconds (debugging aid, LW_FRAMELOG): waits
+    // The last frame() alone, in seconds (debugging aid, SWT_FRAMELOG): waits
     // for the previous frame's GPU work (fence) and for a swapchain image
     // (acquire), and the id its present was given (0 without VK_KHR_present_id)
     struct LastFrame {

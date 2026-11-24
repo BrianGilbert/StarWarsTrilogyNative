@@ -47,6 +47,13 @@ data/crom.bin ──analyze.py──▶ out/listing.asm, functions.txt, report.t
 gen/*.cpp + runtime/ (memory, Real3D, SCSP, input) ──CMake──▶ StarWarsTrilogy.exe
 ```
 
+## Debugging switches
+
+Logs, recordings and test aids are turned on with environment variables (`SWT_FILM`, `SWT_GPUTIME`,
+`SWT_NO_CINEMA`...). All of them are listed with what they do in `src/runtime/env_switches.cpp`, the one place
+that reads them, and the log lists those set when the game starts. The old Lost World names (`LW_FILM`...) still
+work.
+
 ## macOS
 
 The generated C++ and the game's hardware are the same on both systems; only the layer under them differs.

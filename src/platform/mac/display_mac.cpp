@@ -12,12 +12,13 @@
 #include <cstdlib>
 
 #include "platform_mac.h"
+#include "../../runtime/env_switches.h"
 
 namespace {
 
 // SWT_BACKGROUND (test runs): the hidden window stays as it is, as a dry run
 bool background() {
-    static const bool on = getenv("SWT_BACKGROUND") != nullptr;
+    static const bool on = swt_env_on("SWT_BACKGROUND");
     return on;
 }
 

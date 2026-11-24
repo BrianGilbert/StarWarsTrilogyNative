@@ -9,6 +9,7 @@
 
 #include "../audio/explosion_sound.h"
 #include "r3d_screen.h"
+#include "../runtime/env_switches.h"
 
 namespace {
 
@@ -492,7 +493,7 @@ void r3d_set_swt_explosions(bool enhanced) { g_enhanced = enhanced; }
 void r3d_swt_explosions(R3DScene& out, const std::vector<std::vector<R3DInstance>>& instances) {
     // Yavin (top state 3); SWT_EXPLOSIONS_ANYWHERE=1 everywhere the sprite is
     // drawn, replays included (testing)
-    static const bool anywhere = getenv("SWT_EXPLOSIONS_ANYWHERE") != nullptr;
+    static const bool anywhere = swt_env_on("SWT_EXPLOSIONS_ANYWHERE");
     const bool on = g_enhanced && (anywhere || r3d_swt_stage() == 3);
     explosion_sound_enable(on);
     if (!on) {
@@ -620,8 +621,8 @@ void r3d_swt_explosions(R3DScene& out, const std::vector<std::vector<R3DInstance
                 const float* p = out.viewports[e.viewport].proj;
                 float ndc = (p[0] * e.c.x + p[8] * e.c.z + p[12]) / -e.c.z;
                 explosion_sound_event(std::clamp(ndc * 0.8f, -0.8f, 0.8f));
-                // LW_SNDLOG (with the sound board's out/voices.csv): when each began
-                static FILE* log = getenv("LW_SNDLOG") ? fopen("out/explosions.csv", "w") : nullptr;
+                // SWT_SNDLOG (with the sound board's out/voices.csv): when each began
+                static FILE* log = swt_env("SWT_SNDLOG") ? fopen("out/explosions.csv", "w") : nullptr;
                 if (log) {
                     fprintf(log, "%llu;%.4f;%.1f;%.1f\n", (unsigned long long)out.frame, e.radius / -e.c.z, e.c.x, e.c.z);
                     fflush(log);

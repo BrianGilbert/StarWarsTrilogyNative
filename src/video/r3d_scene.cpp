@@ -4,6 +4,7 @@
 
 #include "r3d_explosions.h"
 #include "r3d_screen.h"
+#include "../runtime/env_switches.h"
 
 #include <algorithm>
 #include <array>
@@ -455,7 +456,7 @@ void R3DSceneBuilder::viewport(uint32_t addr, int depth) {
         v.fog_density = density < 99999.0f ? density : 0.0f;
         v.fog_start = float(int16_t(vp(0x25) & 0xFFFF)) / 255.0f;
         v.fog_ambient = float((vp(0x25) >> 16) & 0xFF) / 255.0f;
-        static const bool debug_no_fog = getenv("LW_NOFOG") != nullptr;   // debugging aid
+        static const bool debug_no_fog = swt_env_on("SWT_NOFOG");   // debugging aid
         if (debug_no_fog) v.fog_density = v.fog_start = 0;
         v.scroll_fog = float(vp(0x20) & 0xFF) / 255.0f;
         v.scroll_attenuation = float(vp(0x24) & 0xFF) / 255.0f;
@@ -608,7 +609,7 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
     // switched on 1.4 times as far as the game asks, fading in there as it does
     // (SWT_LOD=1 keeps the original distances)
     static const float lod_far = [] {
-        const char* e = getenv("SWT_LOD");
+        const char* e = swt_env("SWT_LOD");
         float f = e ? float(atof(e)) : 1.4f;   // (2 hung the window in the trench: too many polygons)
         return f > 0.1f ? f : 1.0f;
     }();
@@ -620,11 +621,11 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
     }
     // (SWT_LOD_FADE: how much longer the detail takes to fade in, 1 = the game's)
     static const float lod_fade = [] {
-        const char* e = getenv("SWT_LOD_FADE");
+        const char* e = swt_env("SWT_LOD_FADE");
         float f = e ? float(atof(e)) : 4.0f;
         return f >= 1.0f ? f : 1.0f;
     }();
-    static const bool debug_no_lod = getenv("LW_NOLOD") != nullptr;   // debugging aid
+    static const bool debug_no_lod = swt_env_on("SWT_NOLOD");   // debugging aid
     if (!debug_no_lod && !a.no_cull && !no_lod && lod_scale < del[3]) return;   // too far away
 
     uint32_t child = w[7] & 0x07FFFFFF;
@@ -816,7 +817,7 @@ void R3DSceneBuilder::model(uint32_t addr, const Mat& m, const Attribs& a) {
                 // words (as out/scene.txt and the F9 .txt print them) are not drawn
                 static const std::vector<uint32_t> hide_tex = [] {
                     std::vector<uint32_t> list;
-                    if (const char* e = getenv("SWT_HIDE_TEX"))
+                    if (const char* e = swt_env("SWT_HIDE_TEX"))
                         for (const char* q = e; *q;) {
                             char* end = nullptr;
                             unsigned long w = strtoul(q, &end, 16);

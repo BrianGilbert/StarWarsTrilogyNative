@@ -1,4 +1,4 @@
-"""Reads a frame log written with LW_FRAMELOG=path and reports how evenly the
+"""Reads a frame log written with SWT_FRAMELOG=path and reports how evenly the
 images reached the screen and how evenly the motion they show advanced.
 
 usage: python tools/frame_log.py out/frames.log [--skip SECONDS] [--list N]

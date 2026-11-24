@@ -32,6 +32,7 @@
 #include "../audio/sound_board.h"
 #include "../video/r3d_state.h"
 #include "stats.h"
+#include "env_switches.h"
 
 Ctx g_ctx;
 uint8_t* g_ram;
@@ -527,7 +528,7 @@ static void tilegen_dump_frame(uint64_t frame) {
     static bool parsed = false;
     if (!parsed) {
         parsed = true;
-        if (const char* e = getenv("SWT_TILEGEN_DUMP")) sscanf(e, "%d,%d,%d", &first, &last, &step);
+        if (const char* e = swt_env("SWT_TILEGEN_DUMP")) sscanf(e, "%d,%d,%d", &first, &last, &step);
         if (step < 1) step = 1;
     }
     if (first < 0 || frame < uint64_t(first) || frame > uint64_t(last) || (frame - first) % step) return;
@@ -682,9 +683,7 @@ DWORD WINAPI game_thread(LPVOID) {
     if (g_drive_rom.empty()) printf("No force feedback board program (epr-21119): the game will stop at FAILED FEEDBACK LEVER\n");
     // Test switches left set in the console (set SWT_...=1) change the game
     // in ways that look like bugs later on: listed, so a log shows them
-    if (char** env = _environ)
-        for (; *env; env++)
-            if (strncmp(*env, "SWT_", 4) == 0 || strncmp(*env, "LW_", 3) == 0) printf("[env] %s\n", *env);
+    swt_env_log();
     printf("Running the boot code from 0xFFF00100...\n");
     fn_FFF00100(c);
     printf("Boot done: jumping to %08X (MSR=%08X)\n", c.lr, c.msr);
@@ -736,7 +735,7 @@ static void watch_write(uint32_t a, uint32_t v, int bytes) {
     static bool parsed = false;
     if (!parsed) {
         parsed = true;
-        if (const char* e = getenv("SWT_WATCH")) sscanf(e, "%x,%x", &lo, &hi);
+        if (const char* e = swt_env("SWT_WATCH")) sscanf(e, "%x,%x", &lo, &hi);
     }
     if (a < lo || a >= hi || left <= 0) return;
     left--;
@@ -914,12 +913,12 @@ namespace {
 // of the projection. Up to 6:1 (WIDESCREEN 48:9, three monitors) = 4.5 times
 // 4:3. SWT_NO_WIDE_CULL turns it off
 static void widen_fov() {
-    static const bool off = getenv("SWT_NO_WIDE_CULL") != nullptr;
+    static const bool off = swt_env_on("SWT_NO_WIDE_CULL");
     // In the lightsaber duels (top state 10..13) only the world's viewports
     // (priority 0) are widened: the player's arms and sabre (priority 1),
     // widened, were dropped by the game now and then (they flickered)
     uint32_t top_state = rd32(0x2210E8);
-    static const bool duel_wide = getenv("SWT_DUEL_WIDE_CULL") != nullptr;
+    static const bool duel_wide = swt_env_on("SWT_DUEL_WIDE_CULL");
     bool duel = swt_playing() && top_state >= 10 && top_state <= 13 && !duel_wide;
     float want = off ? 1.0f : std::clamp(g_wide_view.load(), 1.0f, 4.5f);
     struct Slot { float base = 0, wrote = 0, factor = 1; };
@@ -1226,7 +1225,7 @@ static void attract_guard_frame() {
 // the game's jolts and shakes (hits, crashes, the sabres clashing), kept for
 // the pads (app.cpp). SWT_FFB_LOG prints the motors as they change
 static void ffb_frame() {
-    static const bool log = getenv("SWT_FFB_LOG") != nullptr;
+    static const bool log = swt_env_on("SWT_FFB_LOG");
     static float slow[2] = {0, 0};
     static int last[2] = {-1, -1};
     int m[2] = {g_drive.motor_x(), g_drive.motor_y()};
@@ -1428,7 +1427,7 @@ static double sight_reach(int axis) {
 }
 
 uint32_t rt_aim_angle(int axis, uint32_t angle) {
-    static const bool narrow = getenv("SWT_NARROW_AIM") != nullptr, steps = getenv("SWT_LEVER_STEPS") != nullptr;
+    static const bool narrow = swt_env_on("SWT_NARROW_AIM"), steps = swt_env_on("SWT_LEVER_STEPS");
     const int mul = axis ? 21 : 28;
     double a = double(int32_t(angle));
     if (!steps) {
@@ -1457,7 +1456,7 @@ uint32_t rt_aim_angle(int axis, uint32_t angle) {
 // sight reaches the sides of a widescreen screen (SWT_NARROW_AIM keeps it),
 // and both get the lever's precision between steps (SWT_LEVER_STEPS keeps the steps)
 double rt_ground_aim(int axis, double v) {
-    static const bool narrow = getenv("SWT_NARROW_AIM") != nullptr, steps = getenv("SWT_LEVER_STEPS") != nullptr;
+    static const bool narrow = swt_env_on("SWT_NARROW_AIM"), steps = swt_env_on("SWT_LEVER_STEPS");
     double mul = f2d(rd32(axis ? 0x1B6CFC : 0x1B6CF8));
     if (!steps && mul != 0) {
         int step = int(std::lround(v / mul));   // the game's signed step

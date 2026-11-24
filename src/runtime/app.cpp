@@ -59,6 +59,7 @@
 #endif
 #include "app_internal.h"
 #include "settings_bridge.h"
+#include "env_switches.h"
 
 Options g_opt;   // command line and menu settings (options.h)
 
@@ -96,21 +97,21 @@ struct DisplayClock {
     }
 };
 
-// Debugging aid: LW_PACING=1 measures how evenly the interpolated motion
+// Debugging aid: SWT_PACING=1 measures how evenly the interpolated motion
 // runs. Every 5 s it prints, over the presents, the game time shown per
 // present divided by the time between their moments on screen (1.00 =
 // perfectly even; "dispersion" is its standard deviation) and the presents
 // where the picture stood still or went back, and the same for the previous
 // method (frames dated when the game finished them and placed at the moment
 // the image is recorded, no delay for late frames)
-static const bool g_pacing_log = getenv("LW_PACING") != nullptr;
+static const bool g_pacing_log = swt_env_on("SWT_PACING");
 
-// Debugging aid: LW_FRAMELOG=path writes one line per present to that file
+// Debugging aid: SWT_FRAMELOG=path writes one line per present to that file
 // (when the image was prepared, which game frames it shows, where the time
 // went) and, with VK_KHR_present_wait, one per present when it reached the
 // screen; the game thread adds one per game frame (runtime.cpp). Read with
 // tools/frame_log.py
-static FILE* g_frame_log = getenv("LW_FRAMELOG") ? fopen(getenv("LW_FRAMELOG"), "w") : nullptr;
+static FILE* g_frame_log = swt_env("SWT_FRAMELOG") ? fopen(swt_env("SWT_FRAMELOG"), "w") : nullptr;
 static std::mutex g_frame_log_mutex;
 
 void frame_log(const char* fmt, ...) {
@@ -270,10 +271,10 @@ int main(int argc, char** argv) {
         // board), decoded once from the ROM into data/ (not distributed)
         if (g_opt.menu && !g_opt.headless && GetFileAttributesA("data/menu_music.wav") == INVALID_FILE_ATTRIBUTES)
             CreateDirectoryA("data", nullptr), Dsb2::extract_track(dsb_program, dsb_mpeg, 0, "data/menu_music.wav");
-        if (!getenv("LW_NOSOUND")) {
+        if (!swt_env("SWT_NOSOUND")) {
             g_sound.init(std::move(program), std::move(samples), g_opt.headless ? nullptr : &g_audio);
             // The music board (DSB2): its own 68000 and the MPEG streams
-            if (!getenv("SWT_NOMUSIC") && g_sound.init_dsb(std::move(dsb_program), std::move(dsb_mpeg)))
+            if (!swt_env("SWT_NOMUSIC") && g_sound.init_dsb(std::move(dsb_program), std::move(dsb_mpeg)))
                 printf("[sound] music board ready\n");
             else
                 printf("[sound] no music board (dsb_program / dsb_mpeg missing)\n");
@@ -318,8 +319,8 @@ int main(int argc, char** argv) {
     timeBeginPeriod(1);
     QueryPerformanceFrequency(&g_qpf);
     QueryPerformanceCounter(&g_start_time);
-    g_realtime = !getenv("LW_FAST");   // debugging aid: a window at full speed
-    // --replay on a folder (recorded with LW_FILM): its snapshots one after
+    g_realtime = !swt_env("SWT_FAST");   // debugging aid: a window at full speed
+    // --replay on a folder (recorded with SWT_FILM): its snapshots one after
     // another, each captured to out/film_out, so effects that depend on the
     // camera motion can be compared frame by frame
     std::vector<std::string> film;
@@ -390,7 +391,7 @@ int main(int argc, char** argv) {
     // Star Wars Trilogy's worlds are far bigger in its units than Lost World's
     // (the ships in space hundreds to thousands away, Hoth's walkers hundreds):
     // the surface detail reaches that far (a duel is a few units across)
-    if (getenv("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
+    if (swt_env("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
     renderer.set_sharpen(g_opt.sharpen ? 0.5f : 0.0f);
     if (g_opt.haze > 0) printf("[video] distance haze on (strength %.2f)\n", g_opt.haze);
     if (dlss_failed) printf("[video] DLAA/DLSS not available on %s: using FXAA\n", presenter.device_name().c_str());
@@ -585,7 +586,7 @@ int main(int argc, char** argv) {
         // the logo first (not when a debugging aid drives the menu)
         // ARCADE ORIGINAL: no logo, no main menu: the game from its SEGA logo
         if (g_opt.arcade) frontend.open(Frontend::Screen::None);
-        else if (getenv("LW_MENU_KEYS") || getenv("LW_MENU_SHOT") || getenv("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
+        else if (swt_env("SWT_MENU_KEYS") || swt_env("SWT_MENU_SHOT") || swt_env("SWT_RESTARTED")) frontend.open(Frontend::Screen::Main);
         else frontend.open_splash();
         g_menu_open = !g_opt.arcade;
         presenter.input_hook = [&](UINT msg, WPARAM wp, LPARAM lp) -> bool {
@@ -874,7 +875,7 @@ int main(int argc, char** argv) {
             if (prep_on) ready_newest = p;
         }
     });
-    // LW_FRAMELOG: a thread notes when each present reaches the screen
+    // SWT_FRAMELOG: a thread notes when each present reaches the screen
     std::atomic<uint64_t> presented_id{0};
     std::thread shown_waiter;
     if (g_frame_log && presenter.can_wait_present())
@@ -907,8 +908,8 @@ int main(int argc, char** argv) {
     // picture goes out that many refreshes after it is drawn (~17 ms at
     // 120 Hz) instead of after a full swapchain (~32 ms). When refreshes are
     // missed twice within 2 s (the GPU busier than usual), one more for 10 s.
-    // Debugging aid: LW_QUEUE=N (0 = the whole swapchain)
-    const int queue_depth = getenv("LW_QUEUE") ? atoi(getenv("LW_QUEUE")) : 2;
+    // Debugging aid: SWT_QUEUE=N (0 = the whole swapchain)
+    const int queue_depth = swt_env("SWT_QUEUE") ? atoi(swt_env("SWT_QUEUE")) : 2;
     int queue_extra = 0;
     double went_out = 0, last_miss = -100;
     for (;;) {
@@ -1104,10 +1105,10 @@ int main(int argc, char** argv) {
                     frontend.invalidate();
                 }
             }
-            // Debugging aid: LW_MENU_KEYS="40,13,27" presses those keys (one
+            // Debugging aid: SWT_MENU_KEYS="40,13,27" presses those keys (one
             // every 10 presents; Esc in the game pauses; "cX/Y" clicks at window
             // pixel X,Y), then saves out/menu.bmp and quits
-            static const char* menu_keys = getenv("LW_MENU_KEYS");
+            static const char* menu_keys = swt_env("SWT_MENU_KEYS");
             static int menu_presents = 0;
             if (menu_keys && ++menu_presents % 10 == 0) {
                 if (*menu_keys == 'c') {
@@ -1162,7 +1163,7 @@ int main(int argc, char** argv) {
                 music_time = t;
             }
             presenter.set_cursor_visible(frontend.active() && !pad_in_menu && !frontend.splash());
-            static const bool menu_pad = getenv("SWT_MENU_PAD") != nullptr;   // debugging aid: the gamepad's key help
+            static const bool menu_pad = swt_env_on("SWT_MENU_PAD");   // debugging aid: the gamepad's key help
             if (frontend.pad_prompts != (pad_in_menu || menu_pad)) {   // the key help shows the gamepad's buttons or the keys
                 frontend.pad_prompts = pad_in_menu || menu_pad;
                 frontend.invalidate();
@@ -1175,7 +1176,7 @@ int main(int argc, char** argv) {
                     ui.set_image(ui_pixels.data(), rc.right, rc.bottom);
                     double ms = (qpc_seconds() - t0) * 1000;
                     if (ms > 20) printf("[menu] slow redraw: %.0f ms\n", ms);
-                    static const char* menu_shot = getenv("LW_MENU_SHOT");   // debugging aid: the menu picture
+                    static const char* menu_shot = swt_env("SWT_MENU_SHOT");   // debugging aid: the menu picture
                     if (menu_shot) save_bmp(menu_shot, ui_pixels.data(), rc.right, rc.bottom);
                 }
             }
@@ -1337,8 +1338,8 @@ int main(int argc, char** argv) {
             scene_seconds += qpc_seconds() - scene_from;
             built = latest;
             renderer.set_scene(scene);
-            // Debugging aid: LW_SPOTLOG=path writes the world viewport's spotlight every game frame
-            static FILE* spot_log = getenv("LW_SPOTLOG") ? fopen(getenv("LW_SPOTLOG"), "w") : nullptr;
+            // Debugging aid: SWT_SPOTLOG=path writes the world viewport's spotlight every game frame
+            static FILE* spot_log = swt_env("SWT_SPOTLOG") ? fopen(swt_env("SWT_SPOTLOG"), "w") : nullptr;
             if (spot_log) {
                 int worlds = 0;
                 for (const R3DViewport& v : scene->viewports)
@@ -1359,9 +1360,9 @@ int main(int argc, char** argv) {
                 if (!worlds) fprintf(spot_log, "%llu no world\n", (unsigned long long)built->frame);
                 fflush(spot_log);
             }
-            // Debugging aid: LW_FILM=first,count records that many game frames
+            // Debugging aid: SWT_FILM=first,count records that many game frames
             // as snapshots in out/film, to replay as a sequence
-            static const char* film_rec = getenv("LW_FILM");
+            static const char* film_rec = swt_env("SWT_FILM");
             static int film_saved = 0;
             if (film_rec && g_opt.replay.empty()) {
                 unsigned long long first = 0;
@@ -1389,13 +1390,13 @@ int main(int argc, char** argv) {
         // anti-aliasing (DLAA) has settled
         static uint64_t replay_presents = 0;
         if (shot && !g_opt.replay.empty() && replay_presents++ < 60) shot = false;
-        // Debugging aid: LW_SHOTS=N[,FROM[,TO]] saves one game frame in N as out/shots/<frame>.bmp
+        // Debugging aid: SWT_SHOTS=N[,FROM[,TO]] saves one game frame in N as out/shots/<frame>.bmp
         static int shots_every = 0;
         static unsigned long long shots_from = 0, shots_to = ~0ull;
         static bool shots_parsed = false;
         if (!shots_parsed) {
             shots_parsed = true;
-            if (const char* e = getenv("LW_SHOTS")) sscanf(e, "%d,%llu,%llu", &shots_every, &shots_from, &shots_to);
+            if (const char* e = swt_env("SWT_SHOTS")) sscanf(e, "%d,%llu,%llu", &shots_every, &shots_from, &shots_to);
         }
         static uint64_t last_shot = 0;
         if (shots_every > 0 && shown != ~0ull && shown >= shots_from && shown <= shots_to &&
@@ -1418,7 +1419,7 @@ int main(int argc, char** argv) {
         // The game makes ~57 frames per second; in between, the 3D scene is
         // drawn part way from the previous frame to the one built, at shown_time
         // on the game's own evenly spaced timeline
-        static const char* fixed_interp = getenv("LW_INTERP");   // debugging aid: fixed position, e.g. 0.5
+        static const char* fixed_interp = swt_env("SWT_INTERP");   // debugging aid: fixed position, e.g. 0.5
         if ((interpolating || fixed_interp) && built) {
             double now = qpc_seconds();
             double t = std::clamp((shown_time - built->time) / frame_period + 1.0, 0.0, 1.0);

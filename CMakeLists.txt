@@ -275,6 +275,7 @@ add_executable(StarWarsTrilogy WIN32
     src/runtime/app_files.cpp
     src/runtime/app_input.cpp
     src/runtime/settings_bridge.cpp
+    src/runtime/env_switches.cpp
     src/runtime/eeprom.cpp
     src/runtime/disk_writer.cpp
     src/runtime/jtag.cpp
@@ -409,8 +410,8 @@ endif()
 # hash of C++ and Python against the same vectors, the command-line table and
 # the audio queue and the ROM layout read from the zip.
 # build.bat runs them.
-option(LW_TESTS "Build the unit tests" ON)
-if(LW_TESTS)
+option(SWT_TESTS "Build the unit tests" ON)
+if(SWT_TESTS)
     enable_testing()
     add_executable(tilegen_test tests/tilegen_test.cpp tests/stubs.cpp src/video/tilegen.cpp)
     add_executable(fnv_test tests/fnv_test.cpp)

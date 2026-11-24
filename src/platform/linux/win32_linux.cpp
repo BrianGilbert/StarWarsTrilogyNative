@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "platform_mac.h"
+#include "../../runtime/env_switches.h"
 
 namespace {
 
@@ -272,7 +273,7 @@ BOOL SetWindowTextA(HWND hwnd, const char* text) { return SDL_SetWindowTitle(rei
 
 int MessageBoxA(HWND hwnd, const char* text, const char* title, UINT) {
     fprintf(stderr, "[%s] %s\n", title, text);
-    if (!getenv("SWT_BACKGROUND")) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title, text, reinterpret_cast<SDL_Window*>(hwnd));
+    if (!swt_env("SWT_BACKGROUND")) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title, text, reinterpret_cast<SDL_Window*>(hwnd));
     return 1;
 }
 

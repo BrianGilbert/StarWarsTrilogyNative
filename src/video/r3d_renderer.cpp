@@ -21,6 +21,7 @@
 #include "r3d.vert.h"
 #include "rays.frag.h"
 #include "tilegen.h"
+#include "../runtime/env_switches.h"
 
 namespace {
 
@@ -72,7 +73,7 @@ static_assert(R3DScene::MAX_GLOWS == 8, "atmosphere.glsl's glow[] holds 8 lights
 
 #ifdef __APPLE__
 // Shadow map, square: without ray tracing all the sun shadows come from it (SWT_SHADOW_SIZE to try others)
-const uint32_t SHADOW_SIZE = getenv("SWT_SHADOW_SIZE") ? uint32_t(atoi(getenv("SWT_SHADOW_SIZE"))) : 4096;
+const uint32_t SHADOW_SIZE = swt_env("SWT_SHADOW_SIZE") ? uint32_t(atoi(swt_env("SWT_SHADOW_SIZE"))) : 4096;
 #else
 constexpr uint32_t SHADOW_SIZE = 2048;   // shadow map, square
 #endif
@@ -135,7 +136,7 @@ void R3DRenderer::destroy_buffer(Buffer& b) {
 // SWT_INIT_LOG: every step of the start, as it begins, with the seconds since
 // the first one (a GPU driver that takes long over the shaders, or hangs)
 static bool init_log(const char* step, int n = -1) {
-    static const bool on = getenv("SWT_INIT_LOG") != nullptr;
+    static const bool on = swt_env_on("SWT_INIT_LOG");
     static const auto from = std::chrono::steady_clock::now();
     if (!on) return false;
     double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - from).count();
@@ -215,7 +216,7 @@ bool R3DRenderer::init(VkPresenter& vk, float supersample, int msaa, int aniso, 
         vkGetPhysicalDeviceProperties(vk.gpu(), &gpu);
         bool fp8 = dlss::has_fp8(gpu.deviceName);
         dlss_preset_ = dlss::preset_for(mode, dlss_model, fp8);
-        dlaa_.set_dynamic(getenv("SWT_NO_DYNRES") == nullptr);   // (dynamic_resolution(); before configure: dlss_bridge.dll)
+        dlaa_.set_dynamic(!swt_env_on("SWT_NO_DYNRES"));   // (dynamic_resolution(); before configure: dlss_bridge.dll)
         dlaa_.configure(mode, dlss_preset_);
         printf("[dlaa] mode %d (3D %.0f%% of the size), preset %c (%s, FP8 %s), %u jitter phases\n", mode,
                100.0f / upscale_, char('A' + dlss_preset_ - 1), dlss_model ? "chosen" : "auto", fp8 ? "yes" : "no",
@@ -1280,7 +1281,7 @@ void R3DRenderer::update_atmosphere(const ScreenLayout& lay, uint32_t target_w, 
         u.camera[3] = time;
         for (int i = 0; i < 3; i++) u.sun[i] = pose.sun[i];
         u.sun[3] = w->sun_intensity;
-        static const char* force_sun = getenv("LW_FOGSUN");   // debugging aid: "x,y,z" in view space
+        static const char* force_sun = swt_env("SWT_FOGSUN");   // debugging aid: "x,y,z" in view space
         if (force_sun) {
             float f[3] = {0, 0, -1};
             sscanf(force_sun, "%f,%f,%f", &f[0], &f[1], &f[2]);
@@ -1334,7 +1335,7 @@ void R3DRenderer::update_atmosphere(const ScreenLayout& lay, uint32_t target_w, 
         if (w->space) {   // no ground: everything casts shadows, and space has no haze
             shadow_height_ = -1e9f;
             u.haze[3] = 0;
-            static const bool no_cinema = getenv("SWT_NO_CINEMA") != nullptr;
+            static const bool no_cinema = swt_env_on("SWT_NO_CINEMA");
             u.relief[2] = no_cinema ? 0.0f : 1.0f;   // the films' grey, weathered hulls
         }
         // Ray tracing: the ambient occlusion through the world (all of it)
@@ -1397,7 +1398,7 @@ void R3DRenderer::update_atmosphere(const ScreenLayout& lay, uint32_t target_w, 
             if (ray_tracing_ >= 1 && rt_.ready()) {
                 rt_frame_ = true;
                 rt_world_ = w;
-                static const bool split = getenv("LW_RTSPLIT");   // debugging aid: traced left, shadow map right
+                static const bool split = swt_env("SWT_RTSPLIT");   // debugging aid: traced left, shadow map right
                 shadow_frame_ = split;
                 u.rt[0] = split ? 2.0f : 1.0f;
                 u.rt[1] = 0.012f;   // a little more than the real sun's 0.27 degrees: softer edges
@@ -1427,7 +1428,7 @@ void R3DRenderer::update_atmosphere(const ScreenLayout& lay, uint32_t target_w, 
             u.mist[0] = std::min(haze_strength_, 1.0f);
             u.mist[1] = 0.45f;
             u.mist[2] = 0.12f;
-            static const char* tune = getenv("LW_MIST");   // debugging aid: "upwards,banks"
+            static const char* tune = swt_env("SWT_MIST");   // debugging aid: "upwards,banks"
             if (tune) sscanf(tune, "%f,%f", &u.mist[1], &u.mist[2]);
         }
     } else {
@@ -1763,7 +1764,7 @@ void R3DRenderer::record_world(const Frame& f) {
             // camera (walkers, troopers: their own viewport beside the world's)
             // go in after the ambient occlusion, which darkened them too much;
             // they keep the sun shadows. SWT_ACTOR_AO keeps it on them
-            static const bool actor_ao = getenv("SWT_ACTOR_AO") != nullptr;
+            static const bool actor_ao = swt_env_on("SWT_ACTOR_AO");
             bool in_space = false;
             for (size_t k = i; k < j; k++) in_space |= vps[k].world && vps[k].space;
             auto deferred = [&](const R3DViewport& v) {
@@ -1907,7 +1908,7 @@ void R3DRenderer::record_world_depth(const Frame& f, const R3DViewport& w, bool 
     // the stormtroopers went grey)
     float ao_radius = w.scenery_far > 0 ? std::clamp(0.04f * w.scenery_far, 1.5f, 12.0f) : 12.0f;
     float ao_gain = w.scenery_far > 0 ? std::clamp(w.scenery_far / 250.0f, 0.2f, 1.0f) : 1.0f;
-    static const bool rt_split = getenv("LW_RTSPLIT") != nullptr;   // debugging aid: traced left, shadow map right
+    static const bool rt_split = swt_env_on("SWT_RTSPLIT");   // debugging aid: traced left, shadow map right
     float ap[16] = {w.proj[0] / (full ? widen : 1.0f), w.proj[5], w.proj[8] / (full ? widen : 1.0f),
                     w.proj[9], vx * sx + jitter_x, w.y * sy + jitter_y, vw * sx, w.h * sy,
                     ao_radius, std::min(ao_strength_, 1.0f) * 0.85f * ao_gain, w.fog_density, w.fog_start,
@@ -2012,7 +2013,7 @@ R3DRenderer::ComposePush R3DRenderer::compose_push(const Frame& f) const {
                               [](const R3DViewport& v) { return v.world && v.space; }))
         pc.finish[1] = 1.0f;
     // ... and those scenes get the cinematic grade (SWT_NO_CINEMA: off)
-    static const bool no_cinema = getenv("SWT_NO_CINEMA") != nullptr;
+    static const bool no_cinema = swt_env_on("SWT_NO_CINEMA");
     if (!no_cinema) pc.motion[1] = pc.finish[1];
     return pc;
 }
@@ -2265,8 +2266,8 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
     dyn_fixed_ms_ = std::max(1.0, 2.0 * double(f.up_w) * double(f.up_h) / (2560.0 * 1440.0));
     // (SWT_DYNRES_SCALE=F: debugging aid, always that share, to look at a
     // smaller image; also with --shot)
-    static const float forced = getenv("SWT_DYNRES_SCALE") ? float(atof(getenv("SWT_DYNRES_SCALE"))) : 0.0f;
-    static const bool off = getenv("SWT_NO_DYNRES") != nullptr;
+    static const float forced = swt_env("SWT_DYNRES_SCALE") ? float(atof(swt_env("SWT_DYNRES_SCALE"))) : 0.0f;
+    static const bool off = swt_env_on("SWT_NO_DYNRES");
     if (forced > 0.0f && !off && dlaa_.dynamic_resolution() && motion_pass_)
         dyn_scale_ = std::clamp(forced, float(min_w) / float(f.full_w), 1.0f);   // (down to DLSS's own minimum)
     else if (!dynamic_resolution()) dyn_scale_ = 1.0f;
@@ -2275,7 +2276,7 @@ void R3DRenderer::record(VkCommandBuffer cmd, VkImageView target, VkExtent2D ext
     f.out_h = std::clamp(uint32_t(float(f.full_h) * float(f.out_w) / float(f.full_w) + 0.5f), min_h, f.full_h);
     // Timed with DLAA (the dynamic resolution needs the graphics card's
     // time), and with SWT_GPUTIME, which also prints the averages
-    static const bool gpu_time = getenv("SWT_GPUTIME") || getenv("LW_GPUTIME");
+    static const bool gpu_time = swt_env_on("SWT_GPUTIME");
     if ((gpu_time || dlaa_.ready()) && !gpu_times_) {
         VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
         qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
@@ -2366,7 +2367,7 @@ void R3DRenderer::gpu_time_report(uint32_t out_w, uint32_t out_h) {
         return;
     auto ms = [&](uint32_t from, uint32_t to) { return double(t[to] - t[from]) * timestamp_period_ * 1e-6; };
     update_dynamic_scale(ms(GPU_START, GPU_COMPOSE));
-    static const bool print = getenv("SWT_GPUTIME") || getenv("LW_GPUTIME");
+    static const bool print = swt_env_on("SWT_GPUTIME");
     if (!print) return;
     for (uint32_t i = 1; i < GPU_MARKS; i++) gpu_sum_[i] += ms(i - 1, i);
     gpu_sum_[0] += ms(GPU_START, GPU_COMPOSE);   // the whole frame
@@ -2387,7 +2388,7 @@ void R3DRenderer::gpu_time_report(uint32_t out_w, uint32_t out_h) {
 // Dynamic resolution: with DLSS's own library (not through dlss_bridge.dll)
 // and a refresh to keep to. SWT_NO_DYNRES: debugging aid, always the full size
 bool R3DRenderer::dynamic_resolution() const {
-    static const bool off = getenv("SWT_NO_DYNRES") != nullptr;
+    static const bool off = swt_env_on("SWT_NO_DYNRES");
     return !off && gpu_budget_ms_ > 0.0f && dlaa_.dynamic_resolution() && motion_pass_;
 }
 
@@ -2402,7 +2403,7 @@ bool R3DRenderer::dynamic_resolution() const {
 // grows: dyn_fixed_ms_) plus the rest as the pixels drawn. Never below 70%
 // each way (half the pixels), nor below what DLSS takes (dyn_min_, record)
 void R3DRenderer::update_dynamic_scale(double gpu_ms) {
-    if (getenv("SWT_DYNRES_SCALE")) return;   // (fixed: record)
+    if (swt_env("SWT_DYNRES_SCALE")) return;   // (fixed: record)
     if (!dynamic_resolution() || gpu_ms <= 0.0 || gpu_ms > 200.0) return;
     const double budget = gpu_budget_ms_, fixed = dyn_fixed_ms_;
     const float MIN_SCALE = dyn_min_;

@@ -1,6 +1,7 @@
 #include "scsp.h"
 
 #include "explosion_sound.h"
+#include "../runtime/env_switches.h"
 
 #include <algorithm>
 #include <cmath>
@@ -156,7 +157,7 @@ void Scsp::explosion_frame() {
             if (e.on && !e.placed && ++e.age > kExplosionPlaceFrames) e.placed = true, e.pan = 2;   // 2: the game's pan
 }
 
-// ---- LW_SNDLOG: how each sound is played (to find why one is too quiet) ----
+// ---- SWT_SNDLOG: how each sound is played (to find why one is too quiet) ----
 // out/voices.csv: one line per note (registers at key-on, length, loudest
 // sample before and after TL/DISDL). out/mix.csv: per chip and second, the
 // level of the direct mix and of the effect (DSP) return. Outside the chip
@@ -185,7 +186,7 @@ ChipLog g_chip_log[2];
 bool sndlog() {
     if (!g_log_checked) {
         g_log_checked = true;
-        if (getenv("LW_SNDLOG")) {
+        if (swt_env("SWT_SNDLOG")) {
             g_voices = fopen("out/voices.csv", "w");
             g_mix = fopen("out/mix.csv", "w");
             g_stems = fopen("out/stems.raw", "wb");

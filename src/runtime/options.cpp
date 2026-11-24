@@ -136,7 +136,7 @@ const std::vector<Entry>& table() {
         custom("--shot", "N", "save frame N to out/capture.bmp and the scene to out/scene.txt, then exit", true,
                [](Options& o, const char* v) { o.shot_frame = strtoull(v, nullptr, 10); }),
         text("--replay", "FILE", &Options::replay,
-             "show a snapshot (F9) or play back a folder of them (LW_FILM)", true),
+             "show a snapshot (F9) or play back a folder of them (SWT_FILM)", true),
         custom("--auto", "coin@F,start@F", "press buttons on the given frames", true,
                [](Options& o, const char* v) { o.auto_scripts.push_back(v); }),
         custom("--aim", "X,Y", "gun fixed at ADC values X,Y (calibration)", true,

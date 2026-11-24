@@ -134,7 +134,7 @@ public:
     const std::vector<std::vector<R3DInstance>>& instances() const { return viewport_instances_; }
     // Removes the black cinematic bars the game draws over the scene
     void set_remove_letterbox(bool remove) { remove_letterbox_ = remove; }
-    // The last build's stages in ms (LW_FRAMELOG): the nodes and models, the
+    // The last build's stages in ms (SWT_FRAMELOG): the nodes and models, the
     // world tracking, the screen heuristics, the texture pack, the previous frame's pairing
     const float* stage_ms() const { return stage_ms_; }
     // The game's horizontal field of view was widened by this much for

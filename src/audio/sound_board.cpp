@@ -13,6 +13,7 @@
 
 extern "C" {
 #include "m68k.h"
+#include "../runtime/env_switches.h"
 }
 
 namespace {
@@ -61,7 +62,7 @@ bool SoundBoard::init(std::vector<uint8_t> program, std::vector<uint8_t> samples
     program_ = std::move(program);
     samples_ = std::move(samples);
     out_ = out;
-    const bool dbg = getenv("LW_SNDDBG") != nullptr;
+    const bool dbg = swt_env_on("SWT_SNDDBG");
     for (int i = 0; i < 2; i++) {
         ram_[i].assign(kRamSize, 0);
         scsp_[i].init(ram_[i].data(), kRamSize, i == 0);

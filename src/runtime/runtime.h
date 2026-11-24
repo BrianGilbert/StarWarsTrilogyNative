@@ -42,9 +42,9 @@ extern AutoInput g_auto;
 // The game thread: runs the recompiled program on a 512 MB native stack
 DWORD WINAPI game_thread(LPVOID);
 double qpc_seconds();              // seconds from a fixed origin (QueryPerformanceCounter)
-void frame_log(const char* fmt, ...);   // LW_FRAMELOG (app.cpp); does nothing without it
+void frame_log(const char* fmt, ...);   // SWT_FRAMELOG (app.cpp); does nothing without it
 extern LARGE_INTEGER g_qpf, g_start_time;
-extern bool g_realtime;            // pace the game to real time (off with LW_FAST)
+extern bool g_realtime;            // pace the game to real time (off with SWT_FAST)
 extern std::atomic<bool> g_boot_skip;   // the power-on screens run through with nothing on screen
 extern std::atomic<int> g_debug_jump;     // DEBUG: stage * 4 + phase to go on to from the mission select (-1: none)
 extern std::atomic<int> g_arcade_entry;   // PLAY: the game runs through to the mission select with nothing on screen
