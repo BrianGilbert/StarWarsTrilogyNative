@@ -14,4 +14,9 @@ int aspect_level_of(int aspect);        // the level a WIDESCREEN value allows (
 // The graphics, sound and display options the menu keeps (the controls and
 // the gun are set by app.cpp: they live outside Options)
 void options_from_settings(Options& o, const FrontendSettings& ini);
+// The part of them a change in the menu applies at once, without a restart
+// (options_from_settings does these too): app.cpp applies them the same way
+// at launch and on every change. A distance haze or ambient occlusion turned
+// on keeps the strength it had (--haze 0.6), else 1.
+void live_options_from_settings(Options& o, const FrontendSettings& ini);
 void settings_from_options(FrontendSettings& s, const Options& o);
