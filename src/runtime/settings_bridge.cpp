@@ -19,11 +19,6 @@ int aspect_level(float max_aspect) {
 int aspect_level_of(int aspect) { return std::min(aspect, 4); }
 
 void options_from_settings(Options& o, const FrontendSettings& ini) {
-    o.volume = float(ini.volume);
-    o.music = float(ini.music);
-    o.speakers = ini.speakers;
-    o.cubic_samples = ini.cubic_samples;
-    o.rear_boost = ini.rear_boost;
 #ifdef __APPLE__
     o.msaa = ini.aa == 1 ? 8 : ini.aa == 2 ? 1 : 4;
 #else
@@ -32,12 +27,22 @@ void options_from_settings(Options& o, const FrontendSettings& ini) {
     o.fxaa = ini.aa == 7;
     if (ini.aa == 2 || ini.aa == 7) o.msaa = 1;
 #endif
+    o.arcade = ini.experience == 1;   // (also none of the new effects that have no row: app.cpp)
+    live_options_from_settings(o, ini);
+}
+
+void live_options_from_settings(Options& o, const FrontendSettings& ini) {
+    o.volume = float(ini.volume);
+    o.music = float(ini.music);
+    o.speakers = ini.speakers;
+    o.cubic_samples = ini.cubic_samples;
+    o.rear_boost = ini.rear_boost;
     o.supersample = ini.render_scale / 100.0f;   // RENDER SCALE (--scale wins)
     int aspect = std::clamp(ini.aspect, 0, 5);
     if (aspect_level_of(aspect) != aspect_level(o.max_aspect)) o.max_aspect = MAX_ASPECT[aspect];   // --aspect 2.6 stays as 21:9
-    o.haze = ini.haze ? 1.0f : 0.0f;
+    o.haze = ini.haze ? (o.haze > 0 ? o.haze : 1.0f) : 0.0f;
     o.bloom = BLOOM_STRENGTH[ini.bloom];
-    o.ao = ini.ao ? 1.0f : 0.0f;
+    o.ao = ini.ao ? (o.ao > 0 ? o.ao : 1.0f) : 0.0f;
     o.sun = ini.sun;
     o.shadows = ini.shadows;
     o.ray_tracing = ini.ray_tracing;
@@ -47,7 +52,6 @@ void options_from_settings(Options& o, const FrontendSettings& ini) {
     o.interp = ini.smooth;
     o.saturation = ini.saturation / 100.0f;
     o.gamma = ini.gamma / 100.0f;
-    o.arcade = ini.experience == 1;   // (also none of the new effects that have no row: app.cpp)
 }
 
 void settings_from_options(FrontendSettings& s, const Options& o) {

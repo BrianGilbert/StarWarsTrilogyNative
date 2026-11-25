@@ -116,6 +116,22 @@ int main() {
         CHECK(auto_view.aspect == 5);
         CHECK(parse(wide, {"--aspect", "auto"}) && close_to(wide.max_aspect, 6.0f));
     }
+    {   // a change in the menu while the game runs (live_options_from_settings)
+        Options o;
+        CHECK(parse(o, {"--haze", "0.6", "--aa", "dlaa"}));
+        FrontendSettings s;
+        s.haze = true;
+        s.bloom = 3;
+        s.aa = 2;   // a restart's option: not applied at once
+        live_options_from_settings(o, s);
+        CHECK(close_to(o.haze, 0.6f) && close_to(o.bloom, BLOOM_STRENGTH[3]) && o.dlaa);   // the haze keeps its strength
+        s.haze = false;
+        live_options_from_settings(o, s);
+        CHECK(close_to(o.haze, 0.0f));
+        s.haze = true;
+        live_options_from_settings(o, s);
+        CHECK(close_to(o.haze, 1.0f));   // on again: the menu's strength
+    }
     {   // run modes
         Options o;
         CHECK(parse(o, {"--headless"}));

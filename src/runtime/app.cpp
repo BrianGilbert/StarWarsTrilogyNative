@@ -171,6 +171,41 @@ static void pacing_sample(double now, double display, double shown, const R3DFra
     }
 }
 
+// The menu's options that apply at once (settings_bridge.h,
+// live_options_from_settings), the same way at launch and on every change:
+// to the sound boards and the output
+static void apply_sound_options() {
+    g_sound.set_volume(g_opt.volume);
+    g_sound.set_music_gain(g_opt.music);
+    Scsp::set_cubic(g_opt.cubic_samples);
+    g_sound.set_rear_boost(g_opt.rear_boost);
+    g_audio.set_speakers(AudioStream::Speakers(g_opt.speakers));
+}
+
+// ... and to the renderer
+static void apply_video_options(R3DRenderer& renderer) {
+    renderer.set_max_aspect(g_opt.max_aspect);
+    renderer.set_supersample(g_opt.supersample);
+    renderer.set_distance_haze(g_opt.haze);
+    renderer.set_bloom(g_opt.bloom);
+    renderer.set_picture(g_opt.saturation, g_opt.gamma);
+    renderer.set_ambient_occlusion(g_opt.ao);
+    renderer.set_sun(g_opt.sun);
+    renderer.set_shadows(g_opt.shadows ? 1.0f : 0.0f);
+    renderer.set_ray_tracing(g_opt.ray_tracing);
+    r3d_set_swt_explosions(g_opt.explosions);
+    renderer.set_hdr(g_opt.hdr);
+    renderer.set_sharpen(g_opt.sharpen ? 0.5f : 0.0f);
+}
+
+// The controls the menu keeps outside Options
+static void apply_control_settings(const FrontendSettings& s) {
+    g_pointer_sight = s.pointer_sight;
+    g_duel_invert = s.duel_invert;
+    g_sight_scale = s.sight_size / 100.0f;
+    g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert, s.trigger_rumble};
+}
+
 #ifdef _WIN32
 // The game is a windowed program (no console window of its own). Started from
 // a terminal, its log goes to that terminal; redirected to a file or a pipe
@@ -216,11 +251,7 @@ int main(int argc, char** argv) {
             printf("[experience] ARCADE ORIGINAL\n");
         } else other_ini = arcade_ini;
         options_from_settings(g_opt, ini);
-        g_pointer_sight = ini.pointer_sight;
-        g_duel_invert = ini.duel_invert;
-        g_sight_scale = ini.sight_size / 100.0f;
-        g_pad_settings = {ini.pad_speed, ini.gyro, ini.gyro_speed, ini.vibration, ini.aim_assist, ini.pad_lever, ini.pad_invert,
-                          ini.trigger_rumble};
+        apply_control_settings(ini);
     }
     int exit_code = 0;
     const bool menu_allowed = g_opt.menu;   // no test run (--no-menu itself is read just below)
@@ -277,11 +308,7 @@ int main(int argc, char** argv) {
                 printf("[sound] no music board (dsb_program / dsb_mpeg missing)\n");
         }
         if (!g_opt.wav_path.empty()) g_sound.dump_wav(g_opt.wav_path.c_str());
-        g_sound.set_volume(g_opt.volume);
-        g_sound.set_music_gain(g_opt.music);
-        Scsp::set_cubic(g_opt.cubic_samples);
-        g_sound.set_rear_boost(g_opt.rear_boost);
-        g_audio.set_speakers(AudioStream::Speakers(g_opt.speakers));
+        apply_sound_options();
     }
     g_ram = static_cast<uint8_t*>(calloc(RAM_SIZE + 8, 1));
     CreateDirectoryA("save", nullptr);
@@ -369,30 +396,20 @@ int main(int argc, char** argv) {
     const bool dlss_failed = g_opt.dlaa && !renderer.dlaa_active();
     if (dlss_failed) g_opt.dlaa = false, g_opt.dlss = 0, g_opt.fxaa = true, g_opt.msaa = 1;
     renderer.set_fxaa(g_opt.fxaa);
-    renderer.set_max_aspect(g_opt.max_aspect);
     renderer.set_smooth_2d(!g_opt.pixel_2d);
     renderer.set_hud_edges(!g_opt.hud_centre);
-    renderer.set_distance_haze(g_opt.haze);
-    renderer.set_bloom(g_opt.bloom);
-    renderer.set_picture(g_opt.saturation, g_opt.gamma);
-    renderer.set_ambient_occlusion(g_opt.ao);
-    renderer.set_sun(g_opt.sun);
+    apply_video_options(renderer);
     // Star Wars Trilogy's own effects, with no option: always on, but none in
     // ARCADE ORIGINAL (the drawn sky, its light shafts, soft particles, relief)
     const bool new_effects = !g_opt.arcade;
     renderer.set_night_sky(new_effects);
-    renderer.set_shadows(g_opt.shadows ? 1.0f : 0.0f);
-    renderer.set_ray_tracing(g_opt.ray_tracing);
     renderer.set_light_shafts(new_effects ? 1.0f : 0.0f);
     renderer.set_soft_particles(new_effects);
-    r3d_set_swt_explosions(g_opt.explosions);
-    renderer.set_hdr(g_opt.hdr);
     renderer.set_relief(new_effects);
     // Star Wars Trilogy's worlds are far bigger in its units than Lost World's
     // (the ships in space hundreds to thousands away, Hoth's walkers hundreds):
     // the surface detail reaches that far (a duel is a few units across)
     if (swt_env("SWT_FAR_RELIEF")) renderer.set_relief_range(1200.0f);
-    renderer.set_sharpen(g_opt.sharpen ? 0.5f : 0.0f);
     if (g_opt.haze > 0) printf("[video] distance haze on (strength %.2f)\n", g_opt.haze);
     if (dlss_failed) printf("[video] DLAA/DLSS not available on %s: using FXAA\n", presenter.device_name().c_str());
     if (renderer.dlaa_active())
@@ -502,8 +519,6 @@ int main(int argc, char** argv) {
     bool pad_in_menu = false;
     UiOverlay ui;
     std::vector<uint32_t> ui_pixels;
-    float haze_strength = g_opt.haze > 0 ? g_opt.haze : 1;
-    float ao_strength = g_opt.ao > 0 ? g_opt.ao : 1;
     if (g_opt.menu) {
         if (!frontend.init("third_party/fonts")) printf("[menu] fonts missing: using the Windows ones\n");
         if (!ui.init(presenter)) g_opt.menu = false;
@@ -990,39 +1005,21 @@ int main(int argc, char** argv) {
                     save_settings();
                     frontend.invalidate();
                     break;
-                case Frontend::Action::SettingsChanged:
-                    if (aspect_level(g_opt.max_aspect) != aspect_level_of(s.aspect))   // an --aspect between the levels stays until changed
-                        renderer.set_max_aspect(g_opt.max_aspect = MAX_ASPECT[s.aspect]);
-                    g_sound.set_volume(float(s.volume));
-                    g_sound.set_music_gain(float(s.music));
-                    toast.set_volume(float(s.volume));
-                    Scsp::set_cubic(g_opt.cubic_samples = s.cubic_samples);
-                    g_sound.set_rear_boost(g_opt.rear_boost = s.rear_boost);
-                    g_audio.set_speakers(AudioStream::Speakers(g_opt.speakers = s.speakers));
-                    renderer.set_distance_haze(s.haze ? haze_strength : 0);
-                    renderer.set_bloom(g_opt.bloom = BLOOM_STRENGTH[s.bloom]);
-                    renderer.set_ambient_occlusion(s.ao ? ao_strength : 0);
-                    renderer.set_sun(g_opt.sun = s.sun);
-                    renderer.set_shadows((g_opt.shadows = s.shadows) ? 1.0f : 0.0f);
-                    renderer.set_ray_tracing(g_opt.ray_tracing = s.ray_tracing);
-                    r3d_set_swt_explosions(g_opt.explosions = s.explosions);
-                    renderer.set_hdr(g_opt.hdr = s.hdr);
-                    renderer.set_sharpen((g_opt.sharpen = s.sharpen) ? 0.5f : 0.0f);
-                    renderer.set_supersample(g_opt.supersample = s.render_scale / 100.0f);
-                    if (g_opt.interp != s.smooth) {
-                        g_opt.interp = s.smooth;
+                case Frontend::Action::SettingsChanged: {   // applied as at launch
+                    const bool was_interp = g_opt.interp;
+                    live_options_from_settings(g_opt, s);
+                    apply_sound_options();
+                    toast.set_volume(g_opt.volume);
+                    apply_video_options(renderer);
+                    if (g_opt.interp != was_interp) {
                         renderer.set_interpolation(1.0f);   // the latest game frame as it is
                         renderer.set_back_shift(0.0f);
                     }
-                    g_pointer_sight = s.pointer_sight;
-                    g_duel_invert = s.duel_invert;
-                    g_sight_scale = s.sight_size / 100.0f;
-                    renderer.set_picture(s.saturation / 100.0f, s.gamma / 100.0f);
+                    apply_control_settings(s);
                     presenter.set_vsync(s.vsync);
-                    g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert,
-                                      s.trigger_rumble};
                     save_settings();
                     break;
+                }
                 default: break;
                 }
             }
