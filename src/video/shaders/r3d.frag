@@ -386,8 +386,11 @@ void main() {
     if ((flags & TRANSLATOR) != 0u) col.rgb *= 16.0;
 
     // Sun shadow pass (fog_color.w < 0): only what stands near the ground casts
-    // shadows; canopies and roofs high above would put whole scenes in the dark
-    if (vp.fog_color.w < 0.0 && dot(view_pos, vp.sun.xyz) + vp.fog_color.x > vp.fog_color.y) discard;
+    // shadows; canopies and roofs high above would put whole scenes in the dark.
+    // What gives off light casts none (laser bolts, blades, engines, fire)
+    if (vp.fog_color.w < 0.0 &&
+        ((flags & LUMINOUS) != 0u || dot(view_pos, vp.sun.xyz) + vp.fog_color.x > vp.fog_color.y))
+        discard;
 
     vec4 t = vec4(1.0);
     if ((flags & TEXTURED) != 0u) {

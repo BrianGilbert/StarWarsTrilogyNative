@@ -196,11 +196,13 @@ void R3DRayTracer::prepare(const R3DScene& scene, const R3DViewport& world, floa
                 lowest = std::min(lowest, p[k * 3] * up[0] + p[k * 3 + 1] * up[1] + p[k * 3 + 2] * up[2] + camera_height);
             }
             // Canopies and roofs high above would put whole scenes in the dark:
-            // they cast no sun shadows, only the ambient occlusion sees them
-            bool above = lowest > max_height;
+            // they cast no sun shadows, only the ambient occlusion sees them.
+            // Nor what gives off light (laser bolts, blades, engines, fire;
+            // issue #112: the shots drew dark lines on Hoth's snow)
+            uint32_t flags = v[0].flags;
+            bool above = lowest > max_height || (flags & R3D_LUMINOUS);
             if (above && !high) continue;
             Level& l = levels_[above ? 1 : 0];
-            uint32_t flags = v[0].flags;
             if ((flags & R3D_TEXTURED) && (flags & (R3D_ALPHA_TEST | R3D_TEX_ALPHA))) {
                 l.cut_pos.insert(l.cut_pos.end(), p, p + 9);
                 Cutout c;
