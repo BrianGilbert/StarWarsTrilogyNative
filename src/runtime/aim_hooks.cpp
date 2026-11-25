@@ -1,5 +1,7 @@
 // The sight's hooks (tools/recomp.py, ppc_rt.h; moved from runtime.cpp): the
 // lever's aim widened for widescreen and made finer than the game's steps
+#define WIN32_LEAN_AND_MEAN   // runtime.h brings windows.h: no min/max macros (std::max)
+#define NOMINMAX
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

@@ -2,6 +2,8 @@
 // MAIN MENU run on to the mission select unseen, DEBUG jumps to a phase, a
 // game that ends goes back behind the menu, and the lever's force feedback
 // becomes pad rumble. Called by rt_event once a frame (game_flow.h)
+#define WIN32_LEAN_AND_MEAN   // runtime.h brings windows.h: no min/max macros (std::max)
+#define NOMINMAX
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
