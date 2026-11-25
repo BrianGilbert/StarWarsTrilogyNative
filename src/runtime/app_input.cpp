@@ -383,7 +383,7 @@ bool poll_gamepads(HWND hwnd) {
             g_pads.rumble_triggers(i, 0.8f, 0.0f, 70);
         }
         fire_was[i] = fire, reload_was[i] = reload;
-        // The lever's force feedback (runtime.cpp ffb_frame): the jolts
+        // The lever's force feedback (game_flow.cpp ffb_frame): the jolts
         // on the pad that steers (SWT_NO_FFB_RUMBLE: none)
         static const bool no_ffb = swt_env_on("SWT_NO_FFB_RUMBLE");
         if (g_p1_pad == i && !no_ffb) {

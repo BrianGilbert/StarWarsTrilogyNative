@@ -382,7 +382,7 @@ int main(int argc, char** argv) {
         g_audio.start();
         // the main menu (or the intro video) comes first; ARCADE ORIGINAL: the game as it is, from its SEGA logo
         g_hold = (g_opt.menu && !g_opt.arcade) || intro;
-        g_skip_attract = g_opt.menu && g_auto.events.empty() && !g_opt.arcade;   // the menu instead of the attract (runtime.cpp)
+        g_skip_attract = g_opt.menu && g_auto.events.empty() && !g_opt.arcade;   // the menu instead of the attract (game_flow.cpp)
         set_unseen(!g_opt.show_boot);
         CreateThread(nullptr, 512u << 20, game_thread, nullptr, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
     }
@@ -702,7 +702,7 @@ int main(int argc, char** argv) {
         // PLAY: straight to the mission select. Once the game is past its boot
         // it runs on with nothing on screen, through the SEGA logo (which
         // takes no coin), while the coin and START go in for the player
-        // (runtime.cpp, arcade_entry_frame)
+        // (game_flow.cpp, arcade_entry_frame)
         if (arcade_join && !g_boot_skip) {
             arcade_join = 0;
             arcade_entered = true;
@@ -710,7 +710,7 @@ int main(int argc, char** argv) {
             set_unseen(true);
         }
         // A game over: the main menu, while the game goes on to the mission
-        // select behind it instead of into the attract (runtime.cpp, attract_guard_frame)
+        // select behind it instead of into the attract (game_flow.cpp, attract_guard_frame)
         if (g_game_over_menu.exchange(false) && g_opt.menu) {
             arcade_join = 0;
             play_waits = false;
@@ -723,7 +723,7 @@ int main(int argc, char** argv) {
             frontend.starting = false;
             close_menu();
         }
-        {   // the 3D view's width (widescreen culling and sight, runtime.cpp)
+        {   // the 3D view's width (widescreen culling and sight, runtime.cpp and aim_hooks.cpp)
             RECT wrc;
             GetClientRect(presenter.hwnd(), &wrc);
             if (wrc.right > 0 && wrc.bottom > 0)
@@ -759,7 +759,7 @@ int main(int argc, char** argv) {
                 case Frontend::Action::Resume:
                     close_menu();
                     break;
-                case Frontend::Action::StartDebug:   // DEBUG: a phase of a stage (runtime.cpp, debug_jump_frame)
+                case Frontend::Action::StartDebug:   // DEBUG: a phase of a stage (game_flow.cpp, debug_jump_frame)
                     g_debug_jump = frontend.debug_choice;
                     if (!arcade_entered) {
                         arcade_join = 1;
