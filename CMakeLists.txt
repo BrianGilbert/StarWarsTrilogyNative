@@ -404,7 +404,8 @@ elseif(WIN32)
 endif()
 
 # Unit tests (ctest): the 2D composition against golden hashes, the
-# command-line table, the audio queue and the ROM layout read from the zip.
+# command-line table, the audio queue, the ROM layout read from the zip and
+# (with Python) the ROM table, the same in rom_zip.cpp and tools/romtool.py.
 # build.bat runs them.
 option(SWT_TESTS "Build the unit tests" ON)
 if(SWT_TESTS)
@@ -449,5 +450,10 @@ if(SWT_TESTS)
     add_test(NAME disk_writer COMMAND disk_writer_test)
     if(NOT APPLE)
         add_test(NAME menu_music COMMAND menu_music_test)
+    endif()
+    # The ROM table written twice, in rom_zip.cpp and tools/romtool.py: the same in both
+    find_package(Python3 3.10 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME rom_table COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/rom_table_test.py ${CMAKE_SOURCE_DIR})
     endif()
 endif()

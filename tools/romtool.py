@@ -13,7 +13,8 @@ import zlib
 # hardware interleaving format: stride/chunk/byte_swap. Checked against the
 # boot code: the reset vector at 0xFFF00100 decodes and copies CROM[0:2 MB] to
 # RAM. dsb_* is the Digital Sound Board 2 (68000 + MPEG music and voices);
-# drive_program the Z80 of the force feedback board.
+# drive_program the Z80 of the force feedback board. src/runtime/rom_zip.cpp has
+# the same table, for the game reading the zip (tests/rom_table_test.py checks it).
 REGIONS = {
     "crom": dict(stride=8, chunk=2, swap=True, files=[
         ("epr-21382a.20", 0x69BAF117, 0x0000000),
