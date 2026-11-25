@@ -9,7 +9,7 @@ layout(push_constant) uniform AmbientOcclusion {
     vec4 rect;     // world viewport in target pixels: x, y, width, height
     vec4 params;   // radius (view units), strength, fog density, fog start
     vec4 misc;     // x: noise seed, y: largest radius in pixels, z: rays per pixel when traced (0 = from the depth),
-                   // w: 1 = traced on the left half only (LW_RTSPLIT)
+                   // w: 1 = traced on the left half only (SWT_RTSPLIT)
 } ao;
 
 const float AO_NEAR = 1e-3;   // r3d_scene.cpp projection

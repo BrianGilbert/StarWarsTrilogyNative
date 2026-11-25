@@ -272,8 +272,11 @@ endif()
 add_executable(StarWarsTrilogy WIN32
     src/runtime/runtime.cpp
     src/runtime/app.cpp
+    src/runtime/app_2d.cpp
+    src/runtime/app_debug.cpp
     src/runtime/app_files.cpp
     src/runtime/app_input.cpp
+    src/runtime/app_prep.cpp
     src/runtime/settings_bridge.cpp
     src/runtime/env_switches.cpp
     src/runtime/eeprom.cpp

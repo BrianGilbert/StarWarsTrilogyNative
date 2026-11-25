@@ -1011,6 +1011,12 @@ bool boot_logo_up() {
 
 bool g_fast_idle = false;
 
+void set_unseen(bool unseen) {
+    g_boot_skip = g_fast_idle = unseen;
+    g_sound.set_dsp_enabled(!unseen);
+    g_sound.set_muted(unseen);
+}
+
 // PLAY from the menu (app.cpp): the game, held at its SEGA logo, runs on
 // unseen, with a coin and START every second (the logo takes neither), until
 // its mode byte (0x1BC85B: 0 attract, 1 credit taken, 4 mission select,
@@ -1212,9 +1218,7 @@ static void attract_guard_frame() {
     if (!ended || !g_skip_attract || g_arcade_entry || g_boot_skip) return;
     printf("[play] the game is over: back to the menu, on to the mission select unseen (frame %llu)\n",
            (unsigned long long)g_frame);
-    g_boot_skip = g_fast_idle = true;
-    g_sound.set_dsp_enabled(false);
-    g_sound.set_muted(true);
+    set_unseen(true);
     g_arcade_entry = 3;
     g_game_over_menu = true;
 }
@@ -1283,9 +1287,7 @@ void rt_event(Ctx& c) {
             video_snapshot();
             bool boot_done = g_arcade_entry ? arcade_entry_frame() : (g_frame % 4 == 0 && boot_logo_up()) || g_frame > 3000;
             if (g_boot_skip && boot_done) {
-                g_boot_skip = g_fast_idle = false;
-                g_sound.set_dsp_enabled(true);
-                g_sound.set_muted(false);   // fades in from silence
+                set_unseen(false);   // the sound fades in from silence
                 printf("[boot] start screens skipped in %.1f s (frame %llu)\n",
                        double(GetTickCount64() - g_boot_ms) / 1000.0, (unsigned long long)g_frame);
                 LARGE_INTEGER now;   // real-time pacing starts from here

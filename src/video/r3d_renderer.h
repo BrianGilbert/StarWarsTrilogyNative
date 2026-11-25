@@ -115,7 +115,7 @@ public:
     // A procedural night sky behind a world the game leaves on a black
     // backdrop in the dark (not in the original; part of SKY: PROCEDURAL)
     void set_night_sky(bool on) { night_sky_ = on; }
-    bool back_black() const { return back_black_; }      // debugging aid (LW_SPOTLOG)
+    bool back_black() const { return back_black_; }      // debugging aid (SWT_SPOTLOG)
     float night_level() const { return night_level_; }
     // Sun shadows (not in the original): the game world casts shadows along
     // the game's own light direction; 0 = off, 1 = default strength
@@ -254,7 +254,7 @@ private:
     uint32_t rt_generation_ = 0;       // R3DRayTracer::generation() the descriptors point to
     void record_ray_tracing(const Frame& f);
     // GPU time of each pass of the frame (timed whenever DLAA is on, for the
-    // dynamic resolution; SWT_GPUTIME or LW_GPUTIME also averages it over 300
+    // dynamic resolution; SWT_GPUTIME also averages it over 300
     // frames and prints it). Timestamps in this order
     enum GpuMark : uint32_t {
         GPU_START, GPU_UPLOADS, GPU_RT, GPU_SHADOWS, GPU_AO_FROM, GPU_AO_TO, GPU_WORLD, GPU_DLAA, GPU_BLOOM,

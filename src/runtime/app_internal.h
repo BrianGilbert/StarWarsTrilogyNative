@@ -1,6 +1,7 @@
 // What app.cpp's pieces share: the settings, the controls' state and the
 // helpers moved out of app.cpp (app_input.cpp: keyboard, mouse, gamepads and
-// aiming; app_files.cpp: ROM loading, snapshots and captures)
+// aiming; app_files.cpp: ROM loading, snapshots and captures; app_debug.cpp:
+// debugging aids; app_2d.h: the 2D layers; app_prep.h: the preparation thread)
 #pragma once
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -40,3 +41,14 @@ void save_snapshot(const char* path, const R3DFrameState& state, const std::vect
 bool load_snapshot(const char* path);
 void save_bmp(const char* path, const uint32_t* px, int w, int h);
 void dump_scene(const R3DScene& scene, const uint32_t* back, const uint32_t* front, const char* path);
+
+class Frontend;
+void open_pause(Frontend& frontend);   // the pause menu, the game held (app.cpp)
+
+// app_debug.cpp: debugging aids of the presenting loop (env_switches.cpp)
+class VkPresenter;
+class R3DRenderer;
+void debug_menu_keys(Frontend& frontend, VkPresenter& presenter);   // SWT_MENU_KEYS
+void debug_spot_log(const R3DScene& scene, const R3DRenderer& renderer, uint64_t frame);   // SWT_SPOTLOG
+void debug_film(const R3DFrameState& built, const std::vector<uint8_t>& vram);   // SWT_FILM
+void debug_shots(uint64_t shown, VkPresenter& presenter);   // SWT_SHOTS

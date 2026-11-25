@@ -46,6 +46,9 @@ void frame_log(const char* fmt, ...);   // SWT_FRAMELOG (app.cpp); does nothing 
 extern LARGE_INTEGER g_qpf, g_start_time;
 extern bool g_realtime;            // pace the game to real time (off with SWT_FAST)
 extern std::atomic<bool> g_boot_skip;   // the power-on screens run through with nothing on screen
+// The game runs on unseen and unheard, at full speed (its boot, or on to the
+// mission select), or back in view and fading in
+void set_unseen(bool unseen);
 extern std::atomic<int> g_debug_jump;     // DEBUG: stage * 4 + phase to go on to from the mission select (-1: none)
 extern std::atomic<int> g_arcade_entry;   // PLAY: the game runs through to the mission select with nothing on screen
 // The menu stands in for the attract: when set (app.cpp, with the menu on),
