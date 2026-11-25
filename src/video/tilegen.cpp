@@ -189,13 +189,12 @@ void TileGen::compose(const uint8_t* vram, const Output& out, SkyPack* sky) {
         extend[layer] = dark * 10 < total * 9;
     }
 
-    // Replaced backdrops (sky_pack.h)
+    // Procedural skies (sky_pack.h)
     const SkyPack::Picture* sky_picture[4] = {nullptr, nullptr, nullptr, nullptr};
     if (sky) {
         for (int layer = 0; layer < 4; layer++)
             if ((scroll[layer] & 0x80000000u) && !(format & (1u << (8 + layer))))
                 sky_picture[layer] = sky->find(vram, layer, format & (1u << (12 + layer)));
-        sky->frame_done();
     }
     if (sky_coords) {
         memset(sky_coords, 0, SKY_COORDS_W * SKY_COORDS_H * 4);
@@ -205,7 +204,7 @@ void TileGen::compose(const uint8_t* vram, const Output& out, SkyPack* sky) {
             for (int c = 0; c < 3; c++) o |= uint32_t(offsets[pair][c] / 2 + 128) << (16 - 8 * c);
         }
         for (const SkyPack::Picture* p : sky_picture)
-            if (p && p->procedural)
+            if (p)
                 memcpy(&sky_coords[SCREEN_H * SKY_COORDS_W + 8 + (p->slot - SkyPack::FIRST_SLOT) * 2 * SkyPack::BANDS],
                        p->bands, sizeof(p->bands));
     }
@@ -268,7 +267,7 @@ void TileGen::compose(const uint8_t* vram, const Output& out, SkyPack* sky) {
                     // Where this picture is transparent a replaced layer below keeps showing
                     if (sky_coords && (c || !sky_coords[i]))
                         sky_coords[i] = 0xFF000000u | uint32_t(px & 255) << 16 | uint32_t(py & 255) << 8 |
-                                        (sky_picture[layer]->slot - SkyPack::FIRST_SLOT) << 2 | uint32_t(pair) << 5 | uint32_t(sky_picture[layer]->upper) << 6 | uint32_t(sky_picture[layer]->procedural) << 7 |
+                                        (sky_picture[layer]->slot - SkyPack::FIRST_SLOT) << 2 | uint32_t(pair) << 5 | uint32_t(sky_picture[layer]->upper) << 6 |
                                         uint32_t(py >> 8) << 1 | uint32_t(px >> 8);
                     continue;
                 }

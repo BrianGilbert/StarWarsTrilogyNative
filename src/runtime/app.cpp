@@ -377,14 +377,17 @@ int main(int argc, char** argv) {
     renderer.set_picture(g_opt.saturation, g_opt.gamma);
     renderer.set_ambient_occlusion(g_opt.ao);
     renderer.set_sun(g_opt.sun);
-    renderer.set_night_sky(g_opt.sky_procedural);
+    // Star Wars Trilogy's own effects, with no option: always on, but none in
+    // ARCADE ORIGINAL (the drawn sky, its light shafts, soft particles, relief)
+    const bool new_effects = !g_opt.arcade;
+    renderer.set_night_sky(new_effects);
     renderer.set_shadows(g_opt.shadows ? 1.0f : 0.0f);
     renderer.set_ray_tracing(g_opt.ray_tracing);
-    renderer.set_light_shafts(g_opt.shafts ? 1.0f : 0.0f);
-    renderer.set_soft_particles(g_opt.soft);
+    renderer.set_light_shafts(new_effects ? 1.0f : 0.0f);
+    renderer.set_soft_particles(new_effects);
     r3d_set_swt_explosions(g_opt.explosions);
     renderer.set_hdr(g_opt.hdr);
-    renderer.set_relief(g_opt.relief);
+    renderer.set_relief(new_effects);
     // Star Wars Trilogy's worlds are far bigger in its units than Lost World's
     // (the ships in space hundreds to thousands away, Hoth's walkers hundreds):
     // the surface detail reaches that far (a duel is a few units across)
@@ -412,12 +415,11 @@ int main(int argc, char** argv) {
     }
     R3DSceneBuilder builder;
     builder.set_remove_letterbox(!g_opt.letterbox);
-    builder.set_procedural_sky(g_opt.sky_procedural);
-    SkyPack sky;   // sky and other backdrops below the 3D image
-    sky.init("textures/sky", "");
-    // (no procedural sky on GPUs that cannot bind the pictures)
+    builder.set_procedural_sky(new_effects);
+    SkyPack sky;   // the drawn skies below the 3D image
+    // (none on GPUs that cannot bind the pictures)
     if (renderer.overlay_slots() <= SkyPack::LAST_SLOT) sky.disable();
-    sky.set_procedural(g_opt.sky_procedural);
+    sky.set_procedural(new_effects);
     // Interpolation of the back layers (the sky): where each row's picture was
     // in the last two 2D frames composed, and the vblanks of the 2D frames
     // whose scroll is in sky_coords (the shift applies while the 3D goes

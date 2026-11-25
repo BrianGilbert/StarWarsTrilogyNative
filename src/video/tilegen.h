@@ -30,7 +30,7 @@ public:
         // The foreground without the brightness offsets the game uses for
         // fades (boot_logo_up in runtime.cpp)
         uint32_t* front_raw = nullptr;
-        // With sky: which replacement picture and point each back pixel shows
+        // With sky: which procedural sky and point each back pixel shows
         // (SKY_COORDS_W x SKY_COORDS_H; layout below)
         uint32_t* sky_coords = nullptr;
         // SCREEN_H x 3: on each row, the layer that shows most of the back
@@ -39,14 +39,14 @@ public:
         int32_t* back_rows = nullptr;
     };
     // vram: copy of 0xF1000000..0xF118FFFF as written by the game.
-    // sky (optional): replacements for the layers below the 3D image; their
-    // pixels in `back` come from the replacement (needs out.sky_coords).
+    // sky (optional): procedural skies for the layers below the 3D image; their
+    // pixels in `back` come from the sky (needs out.sky_coords).
     // Reentrant: the only state kept between calls is a per-thread palette cache.
     static void compose(const uint8_t* vram, const Output& out, SkyPack* sky = nullptr);
-    // Sky coordinates: per back pixel B = procedural sky << 7 | upper procedural sky << 6 | layer pair << 5 |
+    // Sky coordinates: per back pixel B = upper sky << 6 | layer pair << 5 |
     // picture slot << 2 | y bit 8 << 1 | x bit 8,
-    // R = x, G = y (low bits, in the 512x512 layer), A = 255 where a replacement
-    // shows; the first extra row starts with the fade offset of each layer pair
+    // R = x, G = y (low bits, in the 512x512 layer), A = 255 where a procedural
+    // sky shows; the first extra row starts with the fade offset of each layer pair
     // (R, G, B = offset / 2 + 128), and from texel 8 on holds the colours of
     // each procedural sky (SkyPack::Picture::bands, 64 texels per slot). The
     // second one is not written here: the window thread puts there how far

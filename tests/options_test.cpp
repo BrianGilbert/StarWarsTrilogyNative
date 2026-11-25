@@ -36,7 +36,7 @@ int main() {
         CHECK(parse(o, {}));
         CHECK(o.msaa == 4 && !o.dlaa && o.aniso == 8 && close_to(o.bloom, 1) && close_to(o.ao, 1) && close_to(o.haze, 1));
         CHECK(close_to(o.saturation, 0.8f) && o.frame_limit == INT32_MAX && !o.headless);
-        CHECK(o.sky_procedural && o.hdr && o.sun && o.shadows && o.menu && o.data_dir == "data" && o.rom_zip.empty());
+        CHECK(o.hdr && o.sun && o.shadows && o.menu && o.data_dir == "data" && o.rom_zip.empty());
     }
     {   // the capture used to verify the renderer: values, optional strengths and plain flags
         Options o;
@@ -51,10 +51,10 @@ int main() {
     }
     {   // custom values
         Options o;
-        CHECK(parse(o, {"--aa", "dlaa", "--aspect", "21:9", "--sky", "original", "--aim",
+        CHECK(parse(o, {"--aa", "dlaa", "--aspect", "21:9", "--aim",
                         "100,200", "--msaa", "8", "--scale", "1.5", "--volume", "3", "--wav", "out/a.wav", "--data",
                         "roms"}));
-        CHECK(o.dlaa && o.msaa == 8 && close_to(o.max_aspect, 21.0f / 9.0f) && !o.sky_procedural);
+        CHECK(o.dlaa && o.msaa == 8 && close_to(o.max_aspect, 21.0f / 9.0f));
         CHECK(o.fixed_aim && o.aim_x == 100 && o.aim_y == 200 && close_to(o.supersample, 1.5f) && close_to(o.volume, 3));
         CHECK(o.wav_path == "out/a.wav" && o.data_dir == "roms");
         Options r;
@@ -69,8 +69,8 @@ int main() {
         CHECK(ex.explosions && parse(ex, {"--explosions", "arcade"}) && !ex.explosions);
         CHECK(parse(ex, {"--explosions", "enhanced"}) && ex.explosions);
         Options p;
-        CHECK(parse(p, {"--aa", "none", "--aspect", "1.5", "--sky", "procedural"}));
-        CHECK(!p.dlaa && p.msaa == 1 && close_to(p.max_aspect, 1.5f) && p.sky_procedural);
+        CHECK(parse(p, {"--aa", "none", "--aspect", "1.5"}));
+        CHECK(!p.dlaa && p.msaa == 1 && close_to(p.max_aspect, 1.5f));
         Options q;
         CHECK(parse(q, {"--aa", "msaa", "--auto", "coin@10", "--auto", "start@20", "--trace",
                         "10F650,10D564", "--diff", "10F650@300", "--replay", "out/snap/snap_1.bin"}));

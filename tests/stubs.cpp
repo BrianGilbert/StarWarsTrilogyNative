@@ -2,5 +2,4 @@
 // exercise: no backdrop pictures, so compose() takes the plain paths.
 #include "sky_pack.h"
 
-void SkyPack::frame_done() {}
 const SkyPack::Picture* SkyPack::find(const uint8_t*, int, bool) { return nullptr; }

@@ -1,5 +1,4 @@
 # Python packages the tools need: python -m pip install -r tools/requirements.txt
 # (recomp.py, romtool.py and analyze.py need none of them)
-numpy          # make_swt_labels.py, make_text_atlas.py
-Pillow         # the same two, make_2d_replacement.py, make_icon.py, texture_sheet.py
+Pillow         # make_icon.py
 unicorn        # diff_unicorn.py: PowerPC emulation to compare against

@@ -60,7 +60,7 @@ public:
     }
     void set_layers(const uint32_t* back, const uint32_t* front);   // 496x384 BGRA each
     void upload_texture_rows(const std::vector<uint16_t>& rows, int y0, int y1);
-    // Backdrop replacement pictures, and with every set_layers which one each
+    // Procedural sky pictures (SkyPack), and with every set_layers which one each
     // back layer pixel shows (TileGen::SKY_COORDS_W x SKY_COORDS_H BGRA texels)
     void add_sky_pictures(const std::vector<RgbaImage>& images);
     void set_sky_coords(const uint32_t* coords);
@@ -216,7 +216,7 @@ private:
     bool no_indexing_ = false;   // no descriptor indexing (VkPresenter::descriptor_indexing)
     const R3DScene* scene_ = nullptr;
 
-    Image sky_coords_;   // per back layer pixel: backdrop replacement picture and position (tilegen.h)
+    Image sky_coords_;   // per back layer pixel: procedural sky picture and position (tilegen.h)
     Image texture_ram_, back_, front_, color_, depth_, color_ms_;   // color_ms_: MSAA target, resolved into color_
     Image motion_, dlaa_out_;   // DLAA: motion vectors (pixels, RG16F) and the anti-aliased image
     Image dlaa_alpha_;          // DLAA of the 3D image's alpha (in red), which the composition uses

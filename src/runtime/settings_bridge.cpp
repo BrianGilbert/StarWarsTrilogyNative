@@ -47,9 +47,7 @@ void options_from_settings(Options& o, const FrontendSettings& ini) {
     o.interp = ini.smooth;
     o.saturation = ini.saturation / 100.0f;
     o.gamma = ini.gamma / 100.0f;
-    o.arcade = ini.experience == 1;
-    if (o.arcade)   // ARCADE ORIGINAL: also none of the new effects that have no row (--sky original, --no-relief...)
-        o.sky_procedural = o.relief = o.shafts = o.soft = false;
+    o.arcade = ini.experience == 1;   // (also none of the new effects that have no row: app.cpp)
 }
 
 void settings_from_options(FrontendSettings& s, const Options& o) {

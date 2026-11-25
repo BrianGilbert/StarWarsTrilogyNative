@@ -28,7 +28,7 @@ layout(set = 0, binding = 3) uniform sampler2D overlays[64];   // backdrop pictu
 #include "atmosphere.glsl"
 layout(set = 0, binding = 8) uniform sampler2D bloom;   // blurred glow of luminous surfaces (bloom.frag)
 layout(set = 0, binding = 7) uniform sampler2D scene3d_alpha;   // alpha of the 3D image, in red
-layout(set = 0, binding = 9) uniform sampler2D sky_coords;   // backdrop replacements (sky_pack.h, tilegen.h)
+layout(set = 0, binding = 9) uniform sampler2D sky_coords;   // procedural skies (sky_pack.h, tilegen.h)
 layout(set = 0, binding = 10) uniform sampler2D light_shafts;   // rays.frag
 layout(set = 0, binding = 12) uniform sampler2D diffusion;   // the picture behind the HUD, blurred (bloom.frag)
 layout(set = 0, binding = 11) uniform sampler2D exposure_log;   // 1x1: average log brightness of the 3D image, eased
@@ -170,10 +170,10 @@ vec4 layer(sampler2D tex, vec2 q, ivec2 size) {
     return pc.filter2d.x > 0.5 ? xbr(tex, q, size) : texture(tex, q);
 }
 
-// ---- Backdrop replacements ---------------------------------------------------
-// The back layer pixels that show a replaced backdrop say which picture and
-// which point of its 512x512 layer they show; the picture is sampled in
-// between at full resolution, following the game's scroll.
+// ---- Procedural skies -------------------------------------------------------
+// The back layer pixels that show a procedural sky say which one and which
+// point of its 512x512 layer they show; the sky is drawn in between at full
+// resolution, following the game's scroll.
 
 const uint SKY_FIRST_SLOT = 56u;        // SkyPack::FIRST_SLOT
 
@@ -384,7 +384,7 @@ vec3 sky_space(vec2 p) {
 
 // Which picture and point each back layer pixel shows: sampled in between.
 // dx, dy: screen derivatives of qb * SIZE_BACK / 512 (explicit, as the
-// position wraps every 512 pixels). True where the sky is procedural.
+// position wraps every 512 pixels). True where a procedural sky shows.
 bool sky_layer(vec2 qb, vec2 dx, vec2 dy, inout vec4 back) {
     vec2 pos = qb * vec2(SIZE_BACK);
     ivec2 t = clamp(ivec2(floor(pos)), ivec2(0), SIZE_BACK - 1);
@@ -393,34 +393,29 @@ bool sky_layer(vec2 qb, vec2 dx, vec2 dy, inout vec4 back) {
     uvec4 b = uvec4(round(v * 255.0));
     vec2 at = vec2(b.r | ((b.b & 1u) << 8), b.g | (((b.b >> 1) & 1u) << 8)) + clamp(pos - vec2(t), 0.0, 1.0);
     uint slot = SKY_FIRST_SLOT + ((b.b >> 2) & 7u);
-    // Procedural: its picture is the original, for the trees on the horizon
-    bool procedural = (b.b & 128u) != 0u;
+    // Colours of this sky's band of rows, taken from its original (last row)
+    float y = mod(at.y, 512.0);
+    float fy = clamp(y / 16.0 - 0.5, 0.0, 31.0);
+    int band = int(fy), table = 8 + int((b.b >> 2) & 7u) * 64;
+    int next = min(band + 1, 31);
+    vec3 sky = mix(texelFetch(sky_coords, ivec2(table + band * 2, SIZE_BACK.y), 0).rgb,
+                   texelFetch(sky_coords, ivec2(table + next * 2, SIZE_BACK.y), 0).rgb, fy - float(band));
+    vec3 lit = mix(texelFetch(sky_coords, ivec2(table + band * 2 + 1, SIZE_BACK.y), 0).rgb,
+                   texelFetch(sky_coords, ivec2(table + next * 2 + 1, SIZE_BACK.y), 0).rgb, fy - float(band));
     vec4 s;
-    if (!procedural) {
-        s = textureGrad(overlays[NONUNIFORM(slot)], fract(at / 512.0), dx, dy);
+    if ((b.b & 64u) != 0u) {   // the sky above
+        s = vec4(sky_procedural(vec2(at.x, y - 512.0), pc.sky.x * 0.005, sky, lit), 1.0);
     } else {
-        // Colours of this sky's band of rows, taken from its original (last row)
-        float y = mod(at.y, 512.0);
-        float fy = clamp(y / 16.0 - 0.5, 0.0, 31.0);
-        int band = int(fy), table = 8 + int((b.b >> 2) & 7u) * 64;
-        int next = min(band + 1, 31);
-        vec3 sky = mix(texelFetch(sky_coords, ivec2(table + band * 2, SIZE_BACK.y), 0).rgb,
-                       texelFetch(sky_coords, ivec2(table + next * 2, SIZE_BACK.y), 0).rgb, fy - float(band));
-        vec3 lit = mix(texelFetch(sky_coords, ivec2(table + band * 2 + 1, SIZE_BACK.y), 0).rgb,
-                       texelFetch(sky_coords, ivec2(table + next * 2 + 1, SIZE_BACK.y), 0).rgb, fy - float(band));
-        if ((b.b & 64u) != 0u) {   // the sky above
-            s = vec4(sky_procedural(vec2(at.x, y - 512.0), pc.sky.x * 0.005, sky, lit), 1.0);
-        } else {
-            // Trees on the horizon: the dark parts of the original's bottom rows
-            vec4 o = textureGrad(overlays[NONUNIFORM(slot)], fract(at / 512.0), dx, dy);
-            float tree = y > 455.0 ? 1.0 - smoothstep(0.10, 0.20, dot(o.rgb, vec3(0.2126, 0.7152, 0.0722))) : 0.0;
-            s = vec4(mix(sky_procedural(vec2(at.x, y), pc.sky.x * 0.005, sky, lit), o.rgb * 0.9, tree), 1.0);
-        }
+        // Trees on the horizon: the dark parts of the original's bottom rows
+        // (the sky's picture is the original)
+        vec4 o = textureGrad(overlays[NONUNIFORM(slot)], fract(at / 512.0), dx, dy);
+        float tree = y > 455.0 ? 1.0 - smoothstep(0.10, 0.20, dot(o.rgb, vec3(0.2126, 0.7152, 0.0722))) : 0.0;
+        s = vec4(mix(sky_procedural(vec2(at.x, y), pc.sky.x * 0.005, sky, lit), o.rgb * 0.9, tree), 1.0);
     }
     // Fade offset of the layer pair, in the last row
     vec3 offset = (texelFetch(sky_coords, ivec2((b.b >> 5) & 1u, SIZE_BACK.y), 0).rgb * 255.0 - 128.0) * (2.0 / 255.0);
     back = vec4(clamp(s.rgb + offset, 0.0, 1.0) * s.a, s.a);
-    return procedural;
+    return true;
 }
 
 vec4 front_layer(vec2 q) {

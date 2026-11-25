@@ -38,12 +38,8 @@ struct Options {
     float haze = 1;                  // --haze [N] / --no-haze: distance haze that hides the draw distance
     float saturation = 0.8f;         // --saturation: colour saturation (1 = original)
     float gamma = 1;                 // --gamma: 1 = original, higher = brighter
-    bool sky_procedural = true;      // --sky original|procedural: drawn sky instead of the original picture
     bool hdr = true;                 // --no-hdr: the original's clipped lighting
-    bool relief = true;              // --no-relief: flat textures, as in the original
     bool sharpen = true;             // --no-sharpen: no sharpening of the 3D image
-    bool shafts = true;              // --no-shafts: no light shafts from the sun
-    bool soft = true;                // --no-soft: hard edges where translucent effects meet geometry
     bool shadows = true;             // --no-shadows: no sun shadows
     int ray_tracing = 2;             // --rt off|shadows|ao (--no-rt): traced sun shadows (1) and ambient occlusion (2)
     bool sun = true;                 // --no-sun: no sun in the procedural sky

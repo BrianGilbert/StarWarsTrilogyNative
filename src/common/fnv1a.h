@@ -1,6 +1,6 @@
 // FNV-1a, 64 bits: the one hash of the project, for recognising the 2D
-// layers' backdrops (sky_pack.cpp, tilegen.cpp). Two flavours exist because
-// the data differs: bytes and 32-bit words (BGRA pixels, hashed as whole values).
+// layers' backdrops (sky_pack.cpp, tilegen.cpp). It mixes in whole values
+// (BGRA pixels, tile entries...), not their bytes.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -9,12 +9,6 @@ constexpr uint64_t FNV1A_BASIS = 0xcbf29ce484222325ull, FNV1A_PRIME = 0x10000000
 
 // One step: a value (a byte, a word or anything else) mixed into h
 inline uint64_t fnv1a_mix(uint64_t h, uint64_t v) { return (h ^ v) * FNV1A_PRIME; }
-
-inline uint64_t fnv1a_bytes(const void* data, size_t n, uint64_t h = FNV1A_BASIS) {
-    const uint8_t* p = static_cast<const uint8_t*>(data);
-    for (size_t i = 0; i < n; i++) h = fnv1a_mix(h, p[i]);
-    return h;
-}
 
 inline uint64_t fnv1a_words(const uint32_t* p, size_t n, uint64_t h = FNV1A_BASIS) {
     for (size_t i = 0; i < n; i++) h = fnv1a_mix(h, p[i]);

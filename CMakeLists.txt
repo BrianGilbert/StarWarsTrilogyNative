@@ -357,7 +357,7 @@ if(APPLE)
     target_include_directories(StarWarsTrilogy PRIVATE ${MAC_DIR} src/audio src/ui)
     target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static
         "-framework Foundation" "-framework CoreGraphics" "-framework CoreText" "-framework CoreVideo"
-        "-framework CoreMedia" "-framework ImageIO" "-framework UniformTypeIdentifiers"
+        "-framework CoreMedia" "-framework ImageIO"
         "-framework AVFoundation" "-framework Accelerate")
     # The windows.h, compat.h and the rest of the Win32 names for every file.
     # As MSVC builds it for Windows: a*b+c stays two operations (the game's
