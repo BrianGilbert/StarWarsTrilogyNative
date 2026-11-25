@@ -597,6 +597,8 @@ int main(int argc, char** argv) {
     int arcade_join = g_opt.menu && !g_opt.arcade ? 1 : 0;
     bool arcade_entered = false;
     bool play_waits = false;   // PLAY pressed while the game still gets to the mission select
+    bool debug_waits = false;  // ...for DEBUG's phase
+    bool debug_given_up = false;   // DEBUG's LOADING given up: its jump ends behind the menu, then the game goes back
     bool restart = false;      // RESTART NOW: the game starts again once this one has closed
 
     // Achievement notices, over the game and under the menus
@@ -713,13 +715,21 @@ int main(int argc, char** argv) {
         // select behind it instead of into the attract (game_flow.cpp, attract_guard_frame)
         if (g_game_over_menu.exchange(false) && g_opt.menu) {
             arcade_join = 0;
-            play_waits = false;
+            play_waits = debug_waits = false;
             frontend.starting = false;
             frontend.open(Frontend::Screen::Main);
             g_menu_open = g_hold = true;
         }
+        // DEBUG given up during its LOADING: the game, now in the phase behind
+        // the main menu, over and back to the mission select, as on QUIT TO
+        // MAIN MENU (before PLAY's check below: a PLAY pressed since waits for it)
+        if (debug_given_up && !arcade_join && !g_arcade_entry && !g_boot_skip) {
+            debug_given_up = false;
+            g_arcade_entry = 3;
+            set_unseen(true);
+        }
         if (play_waits && !arcade_join && !g_arcade_entry && !g_boot_skip) {
-            play_waits = false;
+            play_waits = debug_waits = false;
             frontend.starting = false;
             close_menu();
         }
@@ -767,9 +777,19 @@ int main(int argc, char** argv) {
                         g_arcade_entry = 3;
                         set_unseen(true);
                     }
-                    play_waits = true;
+                    play_waits = debug_waits = true;
                     frontend.starting = true;
                     frontend.invalidate();
+                    break;
+                case Frontend::Action::CancelPlay:
+                    // Esc during LOADING: the main menu again. The game goes on
+                    // to the mission select behind it, its place under the menu,
+                    // so the next PLAY starts at once (DEBUG: back from its phase)
+                    printf("[play] LOADING given up: back to the main menu\n");
+                    if (debug_waits) debug_given_up = true;
+                    play_waits = debug_waits = false;
+                    frontend.starting = false;
+                    frontend.open(Frontend::Screen::Main);
                     break;
                 case Frontend::Action::QuitToMenu:   // the game over and back to the mission select, unseen (runtime.cpp)
                     arcade_join = 0;
