@@ -10,15 +10,12 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
-#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -54,6 +51,8 @@
 
 #include "../platform/mac/platform_mac.h"
 #endif
+#include "app_2d.h"
+#include "app_prep.h"
 #include "app_internal.h"
 #include "settings_bridge.h"
 #include "env_switches.h"
@@ -204,6 +203,11 @@ static void apply_control_settings(const FrontendSettings& s) {
     g_duel_invert = s.duel_invert;
     g_sight_scale = s.sight_size / 100.0f;
     g_pad_settings = {s.pad_speed, s.gyro, s.gyro_speed, s.vibration, s.aim_assist, s.pad_lever, s.pad_invert, s.trigger_rumble};
+}
+
+void open_pause(Frontend& frontend) {
+    frontend.open(Frontend::Screen::Pause);
+    g_menu_open = g_hold = true;
 }
 
 #ifdef _WIN32
@@ -379,9 +383,7 @@ int main(int argc, char** argv) {
         // the main menu (or the intro video) comes first; ARCADE ORIGINAL: the game as it is, from its SEGA logo
         g_hold = (g_opt.menu && !g_opt.arcade) || intro;
         g_skip_attract = g_opt.menu && g_auto.events.empty() && !g_opt.arcade;   // the menu instead of the attract (runtime.cpp)
-        g_boot_skip = g_fast_idle = !g_opt.show_boot;
-        g_sound.set_dsp_enabled(!g_boot_skip);
-        g_sound.set_muted(g_boot_skip);
+        set_unseen(!g_opt.show_boot);
         CreateThread(nullptr, 512u << 20, game_thread, nullptr, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
     }
 
@@ -437,34 +439,14 @@ int main(int argc, char** argv) {
     // (none on GPUs that cannot bind the pictures)
     if (renderer.overlay_slots() <= SkyPack::LAST_SLOT) sky.disable();
     sky.set_procedural(new_effects);
-    // Interpolation of the back layers (the sky): where each row's picture was
-    // in the last two 2D frames composed, and the vblanks of the 2D frames
-    // whose scroll is in sky_coords (the shift applies while the 3D goes
+    // The 2D layers (app_2d.h) and the vblanks of the 2D frames whose scroll
+    // is in sky_coords (the back layers' shift applies while the 3D goes
     // between the 3D frames of those same vblanks)
-    std::vector<int32_t> back_rows(SCREEN_H * 3), back_rows_prev(SCREEN_H * 3, -1);
-    uint64_t back_rows_frame = ~0ull, shift_from = ~0ull, shift_to = ~0ull, built_from = ~0ull;
+    Snapshots2D snapshots;
+    Compose2D composer(sky);
+    uint64_t shift_from = ~0ull, shift_to = ~0ull, built_from = ~0ull;
     bool f9_was_down = false;
     builder.set_vrom(g_vrom.data(), g_vrom.size());
-    // The 2D layers of one vblank as the renderer takes them (compose_2d below)
-    struct Layers2D {
-        uint64_t frame = ~0ull;   // the vblank
-        std::vector<uint8_t> vram = std::vector<uint8_t>(TILEGEN_SIZE);   // its layer memory
-        std::vector<uint32_t> back = std::vector<uint32_t>(BACK_W * SCREEN_H),
-                              front = std::vector<uint32_t>(SCREEN_W * SCREEN_H),
-                              sky_coords = std::vector<uint32_t>(TileGen::SKY_COORDS_W * TileGen::SKY_COORDS_H);
-        std::vector<RgbaImage> sky_pictures;   // new pictures for the GPU slots
-        bool hud_band = false;
-        uint64_t shift_from = ~0ull, shift_to = ~0ull;   // the 2D frames of the back layers' shift
-    };
-    // A game frame made ready for the screen ahead of time: its 3D scene and
-    // the 2D layers of its vblank (the preparation thread, below)
-    struct Prepared {
-        std::shared_ptr<const R3DFrameState> state;
-        R3DScene scene;
-        Layers2D layers;
-        uint64_t serial = 0;
-        double ready_at = 0;   // when it was ready
-    };
     R3DScene own_scene;   // built on this thread (no interpolation)
     const R3DScene* scene = &own_scene;
     Layers2D own_layers;   // composed on this thread (no 3D, or no interpolation)
@@ -480,34 +462,6 @@ int main(int argc, char** argv) {
     double next_period = 1.0 / 57.524, lateness = 0.004;
     DisplayClock display_clock;
 
-    struct Snapshot2D {
-        uint64_t frame = ~0ull;
-        std::vector<uint8_t> vram = std::vector<uint8_t>(TILEGEN_SIZE);
-    };
-    std::array<Snapshot2D, 4> snaps;   // the 2D layers of the last vblanks (snaps_mutex)
-    size_t newest_snap = 0;
-    std::mutex snaps_mutex;
-    // Copies the game's newest 2D layers into the ring if they are new; the
-    // caller holds snaps_mutex
-    auto poll_snapshots = [&] {
-        std::lock_guard<std::mutex> lock(g_video_mutex);
-        if (g_video_frame != snaps[newest_snap].frame && !g_boot_skip) {
-            newest_snap = (newest_snap + 1) % snaps.size();
-            snaps[newest_snap].frame = g_video_frame;
-            memcpy(snaps[newest_snap].vram.data(), g_video_vram.data(), TILEGEN_SIZE);
-        }
-    };
-    // Copies the newest 2D layers at or before that vblank into `out` (its
-    // frame stays ~0 if there are none); takes snaps_mutex
-    auto take_snapshot = [&](uint64_t up_to, Layers2D& out) {
-        std::lock_guard<std::mutex> lock(snaps_mutex);
-        poll_snapshots();
-        const Snapshot2D* pick = nullptr;
-        for (const Snapshot2D& s : snaps)
-            if (s.frame != ~0ull && s.frame <= up_to && (!pick || s.frame > pick->frame)) pick = &s;
-        out.frame = pick ? pick->frame : ~0ull;
-        if (pick) memcpy(out.vram.data(), pick->vram.data(), TILEGEN_SIZE);
-    };
     std::vector<uint16_t> tex_rows;
     uint64_t shown = ~0ull, presents = 0;
     double scene_total = 0;   // seconds of 2D composition and scene building since the last title
@@ -586,8 +540,7 @@ int main(int argc, char** argv) {
             int x = GET_X_LPARAM(lp), y = GET_Y_LPARAM(lp);
             if (!frontend.active()) {   // in the game: Esc pauses
                 if (msg == WM_KEYDOWN && wp == VK_ESCAPE) {
-                    frontend.open(Frontend::Screen::Pause);
-                    g_menu_open = g_hold = true;
+                    open_pause(frontend);
                     return true;
                 }
                 return false;
@@ -653,84 +606,6 @@ int main(int argc, char** argv) {
     bool toast_shown = toast.init("third_party/fonts") && toast_layer.init(presenter);
     toast.set_volume(g_opt.volume);
 
-    // Whether the HUD sits at the widescreen edges, held for the whole phase
-    // being played (compose_2d): the stage it was taken in, if it is held, and
-    // how many 2D frames in a row the top band has looked like a HUD
-    int hud_stage = -1;
-    bool hud_held = false, hud_held_once = false;
-    int hud_frames = 0;
-    // ... the phase results screens seen, and how many 2D frames in a row the
-    // top band has not looked like a HUD while it was held
-    int hud_results = 0, hud_misses = 0;
-    // Composes the 2D layers of a vblank (out.frame, its layer memory in
-    // out.vram) for the renderer. One composition at a time (prep_mutex): the
-    // 2D packs and the back layers' scroll keep state between them
-    auto compose_2d = [&](Layers2D& out) {
-        bool sky_on = sky.active();
-        TileGen::compose(out.vram.data(),
-                         {.back = out.back.data(),
-                          .front = out.front.data(),
-                          .sky_coords = sky_on ? out.sky_coords.data() : nullptr,
-                          .back_rows = back_rows.data()},
-                         sky_on ? &sky : nullptr);
-        // How far each row of the back layers scrolled since the previous
-        // 2D frame composed, for drawing them in between (renderer.set_back_shift)
-        {
-            uint32_t* shift_row = &out.sky_coords[(SCREEN_H + 1) * TileGen::SKY_COORDS_W];
-            for (int y = 0; y < SCREEN_H; y++) {
-                const int32_t* now_row = &back_rows[3 * y];
-                const int32_t* was = &back_rows_prev[3 * y];
-                int dx = ((now_row[1] - was[1] + 256) & 511) - 256, dy = ((now_row[2] - was[2] + 256) & 511) - 256;
-                bool known = now_row[0] >= 0 && now_row[0] == was[0] && std::abs(dx) < 100 && std::abs(dy) < 100;
-                shift_row[y] = known ? 0xFF000000u | 0xFFu | uint32_t(dx + 128) << 16 | uint32_t(dy + 128) << 8 : 0;
-            }
-            out.shift_from = back_rows_frame;
-            out.shift_to = back_rows_frame = out.frame;
-            back_rows_prev.swap(back_rows);
-        }
-        out.sky_pictures = sky.take_new_images();
-        // The top band only moves to the screen edges when it looks like a
-        // HUD: the score on the left, a gap, the level on the right
-        auto lit = [&](int x0, int x1) {
-            int n = 0;
-            for (int y = 8; y < 38; y++)
-                for (int x = x0; x < x1; x++) n += (out.front[y * SCREEN_W + x] >> 24) != 0;
-            return n;
-        };
-        out.hud_band = lit(303, 318) < 8 && lit(20, 290) > 300 && lit(325, 460) > 150;
-        // The lightsaber duels: SUCCESS / FAILURE at the left (x 13..138),
-        // the enemy's bar and name at the right (316..479)
-        // (its HUD is 3D in fact: r3d_anchor_swt_hud tags it, this lets it move)
-        // (not on the duel's briefing: 2D text at the top)
-        if (g_swt_duel && lit(20, 460) < 20) out.hud_band = true;
-        // While playing, the choice holds for the whole phase: the game blinks
-        // the top HUD off when the player is hit or blocks a shot, and blinks
-        // SUCCESS / FAILURE after a duel, and those frames must not send the
-        // whole HUD back to 4:3 (issues #57, #82). Text in the top band's
-        // centre (a briefing in the middle of a phase; the HUD leaves it
-        // empty) lets it go, and so do the phase's results screen and a top
-        // band that has not looked like a HUD for a second and a half: the
-        // results' text is all over the 4:3 screen, and moving it with the
-        // HUD tore it apart (issue #90). It comes back after half a second of HUD
-        const int stage = g_swt_top_state;
-        const int results = g_swt_phase_results;
-        if (stage != hud_stage) hud_stage = stage, hud_held = hud_held_once = false, hud_frames = hud_misses = 0;
-        if (results != hud_results) hud_results = results, hud_held = false, hud_frames = hud_misses = 0;
-        if (stage >= 0) {
-            if (lit(303, 318) >= 8) {
-                hud_held = false, hud_frames = hud_misses = 0;
-            } else if (out.hud_band) {
-                hud_frames++, hud_misses = 0;
-                if (!hud_held_once || hud_frames >= 30) hud_held = hud_held_once = true;
-            } else {
-                hud_frames = 0;
-                if (hud_held && ++hud_misses >= 90) hud_held = false, hud_misses = 0;
-            }
-            out.hud_band = hud_held;
-        }
-        r3d_set_swt_duel(g_swt_duel);
-        r3d_set_swt_stage(g_swt_top_state);
-    };
     // Hands composed 2D layers to the renderer (their new pictures go separately)
     auto apply_2d = [&](const Layers2D& l) {
         renderer.set_sky_coords(l.sky_coords.data());
@@ -742,99 +617,16 @@ int main(int argc, char** argv) {
         layers_shown = &l;
     };
 
-    // Preparation thread: while interpolating, each new game frame is made
-    // ready as soon as the game finishes it, its 3D scene and its 2D layers
-    // side by side, so this thread only draws and keeps up with every
-    // refresh (the two took ~14 ms here, more than a refresh at 120 Hz, and
-    // the images went out unevenly). The interpolation delay follows when
-    // the frames are ready (lateness), so it includes this work
-    std::mutex prep_mutex;    // one composition and one scene build at a time
-    std::mutex ready_mutex;   // ready_newest and ready_pictures
-    std::shared_ptr<Prepared> ready_newest;
-    // New pictures for the GPU slots, in order: handed over when their frame
-    // (or a later one) is taken, also those of frames never taken
-    struct NewPictures {
-        uint64_t serial = 0;
-        std::vector<RgbaImage> sky;
-    };
-    std::deque<NewPictures> ready_pictures;
-    auto give_pictures = [&](uint64_t serial) {
-        std::vector<NewPictures> due;
-        {
-            std::lock_guard<std::mutex> lock(ready_mutex);
-            while (!ready_pictures.empty() && ready_pictures.front().serial <= serial) {
-                due.push_back(std::move(ready_pictures.front()));
-                ready_pictures.pop_front();
-            }
-        }
-        for (NewPictures& n : due) {
-            if (!n.sky.empty()) renderer.add_sky_pictures(n.sky);
-        }
-    };
-    std::atomic<bool> prep_on{false}, prep_stop{false};
-    std::atomic<uint64_t> prep_us{0}, prep_frames{0};   // its work, read once a second
-    std::thread prep_thread([&] {
-        std::vector<std::shared_ptr<Prepared>> pool;   // reused once nobody else holds them
-        std::shared_ptr<const R3DFrameState> done;
-        uint64_t serial = 0;
-        while (!prep_stop) {
-            std::shared_ptr<const R3DFrameState> state;
-            {
-                std::unique_lock<std::mutex> lock(g_r3d_mutex);
-                g_r3d_cv.wait_for(lock, std::chrono::milliseconds(20),
-                                  [&] { return prep_stop || (prep_on && g_r3d_latest != done); });
-                state = g_r3d_latest;
-            }
-            if (!prep_on) done.reset();
-            if (prep_stop || !prep_on || !state || state == done) continue;
-            done = state;
-            std::shared_ptr<Prepared> p;
-            for (auto& q : pool)
-                if (q.use_count() == 1) {
-                    p = q;
-                    break;
-                }
-            if (!p) pool.push_back(p = std::make_shared<Prepared>());
-            p->state = state;
-            p->serial = ++serial;
-            NewPictures pictures;
-            pictures.serial = p->serial;
-            {
-                std::lock_guard<std::mutex> lock(prep_mutex);
-                take_snapshot(state->vblank, p->layers);   // the 2D layers of the frame's vblank
-                std::future<void> layers;
-                if (p->layers.frame != ~0ull)
-                    layers = std::async(std::launch::async, [&] { compose_2d(p->layers); });
-                double from = qpc_seconds();
-                builder.set_fov_widened(g_wide_applied);
-                builder.set_view_wide(g_opt.max_aspect > 4.0f / 3.0f + 0.01f ? std::max(1.0f, g_wide_view.load()) : 1.0f);
-                builder.build(*state, p->scene);
-                collect_scene_targets(builder, p->scene);
-                double built_at = qpc_seconds();
-                if (layers.valid()) layers.get();
-                double took = qpc_seconds() - from;
-                prep_us += uint64_t(took * 1e6);
-                prep_frames++;
-                const float* st = builder.stage_ms();
-                frame_log("R %llu %.6f %.3f %.3f  nodes %.2f track %.2f screen %.2f pair %.2f  polys %zu\n",
-                          (unsigned long long)state->frame, qpc_seconds(), (built_at - from) * 1000, took * 1000, st[0],
-                          st[1], st[2], st[3], p->scene.polygons);
-                pictures.sky.swap(p->layers.sky_pictures);
-                p->layers.sky_pictures.clear();
-            }
-            std::lock_guard<std::mutex> lock(ready_mutex);
-            ready_pictures.push_back(std::move(pictures));
-            p->ready_at = qpc_seconds();
-            if (prep_on) ready_newest = p;
-        }
-    });
+    // The preparation thread (app_prep.h): the frames made ready ahead of time while interpolating
+    FramePrep prep(builder, snapshots, composer);
+    prep.start();
     // SWT_FRAMELOG: a thread notes when each present reaches the screen
     std::atomic<uint64_t> presented_id{0};
     std::thread shown_waiter;
     if (g_frame_log && presenter.can_wait_present())
         shown_waiter = std::thread([&] {
             uint64_t next = 1;
-            while (!prep_stop) {
+            while (!prep.stopping()) {
                 if (next > presented_id) {
                     Sleep(1);
                     continue;
@@ -846,16 +638,14 @@ int main(int argc, char** argv) {
         });
     // Both threads stop when the loop ends (and with this scope, however it ends)
     struct StopThreads {
-        std::atomic<bool>& stop;
-        std::thread &a, &b;
+        FramePrep& prep;
+        std::thread& waiter;
         void operator()() {
-            stop = true;
-            g_r3d_cv.notify_all();
-            if (a.joinable()) a.join();
-            if (b.joinable()) b.join();
+            prep.stop();
+            if (waiter.joinable()) waiter.join();
         }
         ~StopThreads() { (*this)(); }
-    } stop_threads{prep_stop, prep_thread, shown_waiter};
+    } stop_threads{prep, shown_waiter};
 
     // At most this many images wait for the screen (VK_KHR_present_wait): the
     // picture goes out that many refreshes after it is drawn (~17 ms at
@@ -917,9 +707,7 @@ int main(int argc, char** argv) {
             arcade_join = 0;
             arcade_entered = true;
             g_arcade_entry = 1;
-            g_boot_skip = g_fast_idle = true;
-            g_sound.set_dsp_enabled(false);
-            g_sound.set_muted(true);
+            set_unseen(true);
         }
         // A game over: the main menu, while the game goes on to the mission
         // select behind it instead of into the attract (runtime.cpp, attract_guard_frame)
@@ -977,9 +765,7 @@ int main(int argc, char** argv) {
                         arcade_join = 1;
                     } else if (!g_arcade_entry) {   // a game on: over at once, and on from the mission select
                         g_arcade_entry = 3;
-                        g_boot_skip = g_fast_idle = true;
-                        g_sound.set_dsp_enabled(false);
-                        g_sound.set_muted(true);
+                        set_unseen(true);
                     }
                     play_waits = true;
                     frontend.starting = true;
@@ -988,9 +774,7 @@ int main(int argc, char** argv) {
                 case Frontend::Action::QuitToMenu:   // the game over and back to the mission select, unseen (runtime.cpp)
                     arcade_join = 0;
                     g_arcade_entry = 3;
-                    g_boot_skip = g_fast_idle = true;
-                    g_sound.set_dsp_enabled(false);
-                    g_sound.set_muted(true);
+                    set_unseen(true);
                     frontend.open(Frontend::Screen::Main);
                     break;
                 case Frontend::Action::Quit: presenter.close(); break;
@@ -1040,33 +824,7 @@ int main(int argc, char** argv) {
                     frontend.invalidate();
                 }
             }
-            // Debugging aid: SWT_MENU_KEYS="40,13,27" presses those keys (one
-            // every 10 presents; Esc in the game pauses; "cX/Y" clicks at window
-            // pixel X,Y), then saves out/menu.bmp and quits
-            static const char* menu_keys = swt_env("SWT_MENU_KEYS");
-            static int menu_presents = 0;
-            if (menu_keys && ++menu_presents % 10 == 0) {
-                if (*menu_keys == 'c') {
-                    int cx = 0, cy = 0, len = 0;
-                    sscanf(menu_keys, "c%d/%d%n", &cx, &cy, &len);
-                    menu_keys += len;
-                    if (*menu_keys == ',') menu_keys++;
-                    frontend.click(cx, cy);
-                } else if (*menu_keys) {
-                    char* end = nullptr;
-                    int vk = int(strtol(menu_keys, &end, 10));
-                    menu_keys = *end == ',' ? end + 1 : end;
-                    if (frontend.active()) frontend.key(vk);
-                    else if (vk == VK_ESCAPE) {
-                        frontend.open(Frontend::Screen::Pause);
-                        g_menu_open = g_hold = true;
-                    }
-                } else if (menu_presents % 30 == 0) {
-                    presenter.capture_next("out/menu.bmp");
-                    menu_keys = nullptr;
-                    presenter.close();
-                }
-            }
+            debug_menu_keys(frontend, presenter);   // SWT_MENU_KEYS (app_debug.cpp)
             static Frontend::Screen menu_was = Frontend::Screen::None;
             bool counts = frontend.screen() == Frontend::Screen::Records || frontend.screen() == Frontend::Screen::Main;
             if (counts && menu_was != frontend.screen()) {   // the records, and the main menu's achievements and best score
@@ -1155,9 +913,8 @@ int main(int argc, char** argv) {
             }
         }
         if (pad_pause && g_opt.menu && !frontend.active()) {
-            frontend.open(Frontend::Screen::Pause);
+            open_pause(frontend);
             pad_in_menu = true;
-            g_menu_open = g_hold = true;
         }
         join_update();
         bool f9 = GetForegroundWindow() == presenter.hwnd() && (GetAsyncKeyState(VK_F9) & 0x8000);
@@ -1182,17 +939,12 @@ int main(int argc, char** argv) {
         // While interpolating the frames come from the preparation thread
         // (their lateness includes its work), otherwise straight from the game
         bool interpolating = g_opt.interp && g_opt.replay.empty() && !g_opt.shot_frame;
-        if (interpolating != prep_on) {   // a frame it made earlier is not one to go back to
-            prep_on = interpolating;
-            std::lock_guard<std::mutex> lock(ready_mutex);
-            ready_newest.reset();
-        }
+        if (interpolating != prep.on()) prep.set_on(interpolating);   // a frame it made earlier is not one to go back to
         double display = display_clock.tick();
         std::shared_ptr<const R3DFrameState> latest;
         std::shared_ptr<Prepared> ready;
         if (interpolating) {
-            std::lock_guard<std::mutex> lock(ready_mutex);
-            ready = ready_newest;
+            ready = prep.newest();
         } else {
             std::lock_guard<std::mutex> lock(g_r3d_mutex);
             latest = g_r3d_latest;
@@ -1218,22 +970,17 @@ int main(int argc, char** argv) {
         // frames are interpolated, those of the 3D frame drawn are shown (the
         // picture runs behind the game; the preparation thread composes them
         // with it), unless the game stopped drawing 3D; otherwise the newest
-        uint64_t newest_2d;
-        {
-            std::lock_guard<std::mutex> lock(snaps_mutex);
-            poll_snapshots();
-            newest_2d = snaps[newest_snap].frame;
-        }
+        uint64_t newest_2d = snapshots.poll();
         bool follow = interpolating && latest && newest_2d != ~0ull && newest_2d <= latest->vblank + 4;
         double scene_from = qpc_seconds(), scene_seconds = 0;   // 2D composition and 3D scene build here (CPU)
         const uint64_t shown_before = shown;
         // (shown = ~0: composed again here, as after a change of settings in the pause menu)
         uint64_t compose_up_to = !follow ? (newest_2d != shown ? newest_2d : ~0ull)
                                          : shown == ~0ull && built ? built->vblank : ~0ull;
-        if (compose_up_to != ~0ull) take_snapshot(compose_up_to, own_layers);
+        if (compose_up_to != ~0ull) snapshots.take(compose_up_to, own_layers);
         if (compose_up_to != ~0ull && own_layers.frame != ~0ull) {
-            std::lock_guard<std::mutex> lock(prep_mutex);
-            compose_2d(own_layers);
+            std::lock_guard<std::mutex> lock(prep.work_mutex());
+            composer.compose(own_layers);
             if (!own_layers.sky_pictures.empty()) renderer.add_sky_pictures(own_layers.sky_pictures);
             own_layers.sky_pictures.clear();
             apply_2d(own_layers);
@@ -1245,7 +992,7 @@ int main(int argc, char** argv) {
             built_from = built ? built->vblank : ~0ull;
             scene_from = qpc_seconds();
             if (ready) {   // made ready by the preparation thread, with the 2D layers of its vblank
-                give_pictures(ready->serial);
+                prep.give_pictures(ready->serial, renderer);
                 built_prep = ready;
                 scene = &ready->scene;
                 // (a frame number going back a long way is the game restarted from a saved state)
@@ -1255,7 +1002,7 @@ int main(int argc, char** argv) {
                     layers_prep = ready;
                 }
             } else {
-                std::lock_guard<std::mutex> lock(prep_mutex);
+                std::lock_guard<std::mutex> lock(prep.work_mutex());
                 builder.set_fov_widened(g_wide_applied);
                 builder.set_view_wide(g_opt.max_aspect > 4.0f / 3.0f + 0.01f ? std::max(1.0f, g_wide_view.load()) : 1.0f);
                 builder.build(*latest, own_scene);
@@ -1265,46 +1012,8 @@ int main(int argc, char** argv) {
             scene_seconds += qpc_seconds() - scene_from;
             built = latest;
             renderer.set_scene(scene);
-            // Debugging aid: SWT_SPOTLOG=path writes the world viewport's spotlight every game frame
-            static FILE* spot_log = swt_env("SWT_SPOTLOG") ? fopen(swt_env("SWT_SPOTLOG"), "w") : nullptr;
-            if (spot_log) {
-                int worlds = 0;
-                for (const R3DViewport& v : scene->viewports)
-                    if (v.world) {
-                        worlds++;
-                        fprintf(spot_log,
-                                "%llu vp%d col %.0f%.0f%.0f c %.4f %.4f r %.4f %.4f start %.3f ext %.2f sun %.3f amb %.3f "
-                                "fog %.5f/%.3f scroll %.3f far %.1f black %d night %.2f "
-                                "light %.3f %.3f %.3f world %.3f %.3f %.3f\n",
-                                (unsigned long long)built->frame, worlds, v.spot_color[0], v.spot_color[1], v.spot_color[2],
-                                v.spot_center[0], v.spot_center[1], v.spot_radius[0], v.spot_radius[1], v.spot_start,
-                                v.spot_extent, v.sun_intensity, v.ambient, v.fog_density, v.fog_ambient, v.scroll_fog,
-                                v.scenery_far, int(renderer.back_black()), renderer.night_level(), v.sun[0], v.sun[1], v.sun[2],
-                                v.world_axes[0] * v.sun[0] + v.world_axes[1] * v.sun[1] + v.world_axes[2] * v.sun[2],
-                                v.world_axes[3] * v.sun[0] + v.world_axes[4] * v.sun[1] + v.world_axes[5] * v.sun[2],
-                                v.world_axes[6] * v.sun[0] + v.world_axes[7] * v.sun[1] + v.world_axes[8] * v.sun[2]);
-                    }
-                if (!worlds) fprintf(spot_log, "%llu no world\n", (unsigned long long)built->frame);
-                fflush(spot_log);
-            }
-            // Debugging aid: SWT_FILM=first,count records that many game frames
-            // as snapshots in out/film, to replay as a sequence
-            static const char* film_rec = swt_env("SWT_FILM");
-            static int film_saved = 0;
-            if (film_rec && g_opt.replay.empty()) {
-                unsigned long long first = 0;
-                int count = 0, every = 1;   // optional third value: keep one frame in that many
-                sscanf(film_rec, "%llu,%d,%d", &first, &count, &every);
-                static unsigned long long film_last = 0;
-                if (built->frame >= first && film_saved < count && (!film_saved || built->frame >= film_last + every)) {
-                    film_last = built->frame;
-                    CreateDirectoryA("out/film", nullptr);
-                    char path[64];
-                    snprintf(path, sizeof(path), "out/film/f_%06llu.bin", (unsigned long long)built->frame);
-                    save_snapshot(path, *built, layers_shown->vram);
-                    film_saved++;
-                }
-            }
+            debug_spot_log(*scene, renderer, built->frame);   // SWT_SPOTLOG (app_debug.cpp)
+            debug_film(*built, layers_shown->vram);   // SWT_FILM (app_debug.cpp)
         }
         int y0, y1, tex_dirty_rows = 0;
         if (g_texture_ram.take_dirty(tex_rows, y0, y1)) {
@@ -1317,23 +1026,7 @@ int main(int argc, char** argv) {
         // anti-aliasing (DLAA) has settled
         static uint64_t replay_presents = 0;
         if (shot && !g_opt.replay.empty() && replay_presents++ < 60) shot = false;
-        // Debugging aid: SWT_SHOTS=N[,FROM[,TO]] saves one game frame in N as out/shots/<frame>.bmp
-        static int shots_every = 0;
-        static unsigned long long shots_from = 0, shots_to = ~0ull;
-        static bool shots_parsed = false;
-        if (!shots_parsed) {
-            shots_parsed = true;
-            if (const char* e = swt_env("SWT_SHOTS")) sscanf(e, "%d,%llu,%llu", &shots_every, &shots_from, &shots_to);
-        }
-        static uint64_t last_shot = 0;
-        if (shots_every > 0 && shown != ~0ull && shown >= shots_from && shown <= shots_to &&
-            shown >= last_shot + shots_every) {
-            last_shot = shown;
-            CreateDirectoryA("out/shots", nullptr);
-            char path[64];
-            snprintf(path, sizeof(path), "out/shots/%06llu.bmp", (unsigned long long)shown);
-            presenter.capture_next(path);
-        }
+        debug_shots(shown, presenter);   // SWT_SHOTS (app_debug.cpp)
         if (shot) {
             presenter.capture_next("out/capture.bmp");
             g_texture_ram.dump("out/texture_ram.bin");
@@ -1406,7 +1099,7 @@ int main(int argc, char** argv) {
             double per = t.frames ? 1000.0 / t.frames : 0;   // seconds summed over the presents -> ms per present
             double game_ms = game_n ? double(game_us) / 1000.0 / double(game_n) : 0;
             double scene_ms = presents ? scene_total * 1000.0 / double(presents) : 0;
-            uint64_t prep_total = prep_us.exchange(0), prep_n = prep_frames.exchange(0);
+            uint64_t prep_total = prep.take_us(), prep_n = prep.take_frames();
             double prep_ms = prep_n ? double(prep_total) / 1000.0 / double(prep_n) : 0;
             char title[256];
             snprintf(title, sizeof(title),

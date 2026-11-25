@@ -53,7 +53,7 @@ float traced_shadow(vec3 n);
 float sun_shadow(vec3 n) {
     if (atm.shadow.x <= 0.0 || vp.sun.w <= 0.0 || (flags & (WORLD | NO_SHADOW)) != WORLD) return 1.0;
 #ifdef RAY_TRACING
-    // rt.x 2: traced on the left half only, for comparing (LW_RTSPLIT)
+    // rt.x 2: traced on the left half only, for comparing (SWT_RTSPLIT)
     if (atm.rt.x > 1.5 ? gl_FragCoord.x * atm.backdrop.x < 0.5 : atm.rt.x > 0.0) return traced_shadow(n);
 #endif
     float nl = length(n);
