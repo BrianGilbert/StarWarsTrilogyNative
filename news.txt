@@ -11,6 +11,9 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[26] 2026-11-25
+- Behind the scenes: a big tidy-up of the code, about 4,000 lines fewer. Nothing changes in how the game looks or plays
+
 [25] 2026-11-24
 - New OPTIONS page, in the style of Sega Rally 2: EXPERIENCE, DISPLAY, GRAPHICS, AUDIO and CONTROLS, with what each setting does in a panel at the right. RECORDS uses the same page
 - PLAY lists ARCADE CLASSIC and DOGFIGHT (coming soon); the EXTRA MODES screen and the QUALITY presets are gone
