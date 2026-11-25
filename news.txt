@@ -11,6 +11,9 @@
 #   # ...          a comment, never shown
 # Newest entry at the top. Keep each one short: about ten lines fit.
 
+[27] 2026-11-26
+- Laser shots, lightsabres, engines and fire no longer cast sun shadows (the thin dark lines on Hoth's snow under your shots)
+
 [26] 2026-11-25
 - Behind the scenes: a big tidy-up of the code, about 4,000 lines fewer. Nothing changes in how the game looks or plays
 
