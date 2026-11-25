@@ -8,7 +8,7 @@
 
 #include "options.h"
 #include "settings_bridge.h"
-#include "frontend.h"
+#include "frontend_settings.h"
 
 static int g_failed = 0;
 #define CHECK(cond)                                                     \
