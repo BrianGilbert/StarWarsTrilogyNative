@@ -10,9 +10,10 @@
 #define MINIMP3_NO_SIMD   // the decoder runs a few frames per video frame: plain C is plenty
 #include "minimp3.h"
 
+#include "../runtime/env_switches.h"
+
 extern "C" {
 #include "m68k.h"
-#include "../runtime/env_switches.h"
 }
 
 Dsb2* g_dsb_bus = nullptr;   // the bus the Musashi callbacks use while the DSB2 runs (sound_board.cpp)

@@ -11,9 +11,10 @@
 #include "audio_out.h"
 #include "audio_stream.h"
 
+#include "../runtime/env_switches.h"
+
 extern "C" {
 #include "m68k.h"
-#include "../runtime/env_switches.h"
 }
 
 namespace {
