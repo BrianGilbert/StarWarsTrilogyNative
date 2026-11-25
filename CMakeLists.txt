@@ -271,6 +271,8 @@ endif()
 # console of a terminal it was started from, so the log still shows there
 add_executable(StarWarsTrilogy WIN32
     src/runtime/runtime.cpp
+    src/runtime/aim_hooks.cpp
+    src/runtime/game_flow.cpp
     src/runtime/app.cpp
     src/runtime/app_2d.cpp
     src/runtime/app_debug.cpp
