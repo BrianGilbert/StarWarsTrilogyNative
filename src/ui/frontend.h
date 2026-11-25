@@ -27,7 +27,7 @@ public:
     // DisplayChanged: MODE or RESOLUTION, applied to the window at once.
     // Restart: RESTART NOW (app.cpp saves, closes and starts the game again)
     enum class Action { None, StartArcade, Resume, Quit, DisplayChanged, SettingsChanged,
-                        QuitToMenu, StartDebug, Restart };
+                        QuitToMenu, StartDebug, Restart, CancelPlay };
 
     bool init(const std::string& font_dir);
     void shutdown();
@@ -69,7 +69,10 @@ public:
     // DEBUG (Star Wars Trilogy): straight to a phase of a stage. StartDebug
     // reads debug_choice = stage * 4 + phase (runtime.cpp, debug jumps)
     int debug_choice = -1;
-    bool starting = false;    // PLAY pressed: the game still gets to its mission select (a notice instead of the hint)
+    // PLAY (or DEBUG's phase) pressed while the game still gets to its mission
+    // select: LOADING in PLAY's place, nothing to choose; Esc (the pad's B or
+    // BACK, the right button) gives it up (Action::CancelPlay, app.cpp)
+    bool starting = false;
 
     // RECORDS screen (runtime/stats.h): the window keeps this copy up to date while it is open
     StatsView records;

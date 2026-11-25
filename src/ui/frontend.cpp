@@ -701,7 +701,10 @@ bool Frontend::key(int vk) {
         if (vk == VK_RETURN || vk == VK_SPACE || vk == VK_ESCAPE || vk == VK_BACK) skip_splash();
         return true;
     }
-    if (starting) return true;   // nothing to choose while the game starts
+    if (starting) {   // LOADING: nothing to choose, only Esc to give PLAY up
+        if (vk == VK_ESCAPE || vk == VK_BACK) push(Action::CancelPlay);
+        return true;
+    }
     if (drop_open_) return drop_key(vk);
     if (restart_open_) {
         switch (vk) {
@@ -1142,8 +1145,9 @@ void Frontend::draw_side_menu(const std::vector<Item>& list) {
     }
     // The keys at the right, each in a keycap (or the gamepad's button), ending at the right edge
     struct Key { const wchar_t *pad, *key, *what; };
-    std::vector<Key> keys = {{L"A", L"ENTER", L"SELECT"}};
-    if (screen_ != Screen::Main) keys.push_back({L"B", L"ESC", L"BACK"});
+    std::vector<Key> keys;
+    if (!starting) keys.push_back({L"A", L"ENTER", L"SELECT"});
+    if (screen_ != Screen::Main || starting) keys.push_back({L"B", L"ESC", L"BACK"});
     int kh = U(36), ky = fy + U(12) - kh / 2, x = w - U(70) + U(40);
     for (const Key& k : keys) x -= prompt_width(kh, k.pad, k.key, k.what);
     for (const Key& k : keys) prompt(x, ky, kh, k.pad, k.key, k.what);
@@ -1831,10 +1835,23 @@ bool Frontend::draw(int w, int h, std::vector<uint32_t>& out) {
         fill(0, 0, w, h, 0x000000, float(1 - k * k * (3 - 2 * k)));
         dirty_ = true;
     };
-    if (starting) {   // PLAY pressed: the logo and a notice only, nothing to choose
-        text(MONO, U(34), L"STARTING...  PLEASE WAIT", w - U(110), int((LOGO_TOP + LOGO_H) * h_) + U(60), 2,
-             {GOLD_TOP, GOLD_BOTTOM, EDGE, U(2)});
-        dirty_ = false;
+    if (starting) {   // LOADING (as Virtua Cop 2's): the main menu's look, LOADING where PLAY was
+        const std::wstring hint = screen_ == Screen::Debug ? L"DEBUG: the game goes on to the chosen phase"
+                                                           : L"The credit goes in and the game starts: pick your mission";
+        const Screen keep_screen = screen_;
+        const int keep = selected_;
+        screen_ = Screen::Main, selected_ = 0;
+        draw_side_menu({{PLAY, L"LOADING", L"", hint}});
+        screen_ = keep_screen, selected_ = keep;
+        hit_.clear();   // (nothing to click)
+        values_.clear();
+        // a lightsaber's glow going to and fro under the description (draw_side_menu's places)
+        const int right = w - U(110), left = right - U(600), half = U(60);
+        const int y = int((LOGO_TOP + LOGO_H) * h_) + U(36) + U(104) + U(4) +
+                      U(32) * int(wrap(ITEM, U(24), hint, U(720) - U(20)).size()) + U(18);
+        const double k = 0.5 - 0.5 * std::cos(now_seconds() * 2.6);
+        saber(left + half + int(k * double(right - left - 2 * half)), y, half);
+        dirty_ = true;   // it moves: drawn again every refresh
         fade_in();
         return true;
     }
