@@ -88,7 +88,7 @@ private:
 // texture FIFO at each flush (spec 6.1 - 6.4).
 class R3DTextureRam {
 public:
-    R3DTextureRam() : texels_(2048 * 2048, 0), generation_(64 * 64, 0) {}
+    R3DTextureRam() : texels_(2048 * 2048, 0) {}
 
     // Parses the FIFO words collected since the last flush
     void upload_fifo(const std::vector<uint32_t>& fifo);
@@ -115,18 +115,11 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         if (in.size() != texels_.size()) return;
         texels_ = in;
-        for (auto& g : generation_) g++;
         dirty_y0_ = 0;
         dirty_y1_ = 2048;
     }
     // Copies rows touched since the last call (returns false if nothing changed)
     bool take_dirty(std::vector<uint16_t>& out, int& y0, int& y1);
-
-    // Texture packs: copies a w x h texture at (x, y) with the same wrapping
-    // as the shader (x over the whole RAM, y inside its 1024-row page) and
-    // returns a value that changes whenever any texel of it is rewritten
-    uint64_t read_texture(int x, int y, int w, int h, std::vector<uint16_t>& out);
-    uint64_t texture_generation(int x, int y, int w, int h);
 
 private:
     void upload(uint32_t header, const uint16_t* src, size_t count);
@@ -135,7 +128,5 @@ private:
 
     std::mutex mutex_;
     std::vector<uint16_t> texels_;
-    std::vector<uint32_t> generation_;   // write counter per 32x32 block
-    uint64_t generation_locked(int x, int y, int w, int h) const;
     int dirty_y0_ = 2048, dirty_y1_ = 0;
 };

@@ -9,15 +9,13 @@
 // a 2x2 block of the full-size image (ao_apply.frag fills in the others).
 #extension GL_GOOGLE_include_directive : require
 #ifdef RAY_TRACING
-#extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_ray_query : require
 #endif
 #include "ao_common.glsl"
 #ifdef RAY_TRACING
-// The 3D pass's descriptor set, as set 1: the texture RAM and the texture pack
-// for the cut-out triangles, the acceleration structure and the cut-outs
+// The 3D pass's descriptor set, as set 1: the texture RAM for the cut-out
+// triangles, the acceleration structure and the cut-outs
 layout(set = 1, binding = 0) uniform usampler2D texture_ram;
-layout(set = 1, binding = 1) uniform sampler2D replacements[4096];
 #define RT_SET 1
 #include "raytrace.glsl"
 
@@ -70,7 +68,7 @@ void main() {
     // Fogged surfaces lose their shading, so they lose the occlusion too
     float fog = clamp(ao.params.w + (-p.z) * ao.params.z, 0.0, 1.0);
 #ifdef RAY_TRACING
-    // misc.w 1: traced on the left half only, for comparing (LW_RTSPLIT)
+    // misc.w 1: traced on the left half only, for comparing (SWT_RTSPLIT)
     if (ao.misc.z > 0.0 && (ao.misc.w == 0.0 || frag.x < ao.rect.x + ao.rect.z * 0.5)) {
         out_ao = vec4(mix(1.0, traced_open(p, n, noise), 1.0 - fog));
         return;

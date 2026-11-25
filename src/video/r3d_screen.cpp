@@ -1,4 +1,5 @@
 #include "r3d_screen.h"
+#include "../runtime/env_switches.h"
 
 #include <atomic>
 
@@ -65,7 +66,7 @@ void r3d_share_world(R3DScene& out) {
     // The desert of the duel with Boba Fett (Tatooine): one 64x64 texture
     // drawn luminous and see-through, flat from near to far. Tagged so the
     // shader adds grains and wind ripples (SWT_PLAIN_SAND keeps it as it was)
-    static const bool plain_sand = getenv("SWT_PLAIN_SAND") != nullptr;
+    static const bool plain_sand = swt_env_on("SWT_PLAIN_SAND");
     if (!plain_sand)
         for (const R3DViewport& v : vps)
             for (uint32_t k = v.trans_first; k < v.trans_first + v.trans_count; k++)
@@ -74,7 +75,7 @@ void r3d_share_world(R3DScene& out) {
     // them too, but they are drawn over the world, priority 1) in the
     // world's viewports. The shader gives the black of the suit and helmet a
     // gloss and a reflection of the room (SWT_PLAIN_VADER keeps them matt)
-    static const bool plain_vader = getenv("SWT_PLAIN_VADER") != nullptr;
+    static const bool plain_vader = swt_env_on("SWT_PLAIN_VADER");
     if (g_duel && !plain_vader) {
         int low = vps.front().priority;
         auto vader = [](uint32_t t) {
@@ -152,7 +153,7 @@ void r3d_share_world(R3DScene& out) {
     // its own pictures, and in Hoth's ice cave (snowtroopers before the Falcon)
     // 0x04A80200 is its rock, which came out as the Death Star's night side,
     // almost black (issue #23). Unknown (-1: a replay, the attract): as before
-    static const bool no_ds = getenv("SWT_PLAIN_DEATH_STAR") != nullptr;
+    static const bool no_ds = swt_env_on("SWT_PLAIN_DEATH_STAR");
     if (no_ds) return;
     int stage = g_stage;
     if (stage >= 0 && !(stage >= 2 && stage <= 3) && !(stage >= 8 && stage <= 9)) return;
@@ -168,7 +169,7 @@ void r3d_share_world(R3DScene& out) {
         for (uint32_t k = v.opaque_first; k < v.opaque_first + v.opaque_count; k++)
             trench += (out.vertices[k].tex >> 16) == 0x0278u;
     }
-    static const bool no_fade = getenv("SWT_NO_TRENCH_FADE") != nullptr;
+    static const bool no_fade = swt_env_on("SWT_NO_TRENCH_FADE");
     if (world_vp && !no_fade && trench >= 3 * 500 && world_vp->scenery_far > 200.0f && world_vp->scenery_far < 1e5f)
         world_vp->depth_fade = world_vp->scenery_far;
     for (const R3DViewport& v : vps) {
@@ -326,7 +327,7 @@ void r3d_anchor_swt_hud(R3DScene& out) {
 // dark threads across the ceiling. Indoors (a small world) those slivers are
 // dropped; the thick cables along the tunnels stay. SWT_KEEP_WIRES keeps them
 void r3d_hide_wires(R3DScene& out) {
-    static const bool keep = getenv("SWT_KEEP_WIRES") != nullptr;
+    static const bool keep = swt_env_on("SWT_KEEP_WIRES");
     if (keep) return;
     bool indoors = false;
     for (const R3DViewport& v : out.viewports)
@@ -375,7 +376,7 @@ bool r3d_hide_sky_dome(R3DScene& out) {
 // world's viewports, and in a duel Luke's arms over it, never the HUD (the
 // sight is a red ring). SWT_NO_GLOW_LIGHT turns it off
 void r3d_find_glows(R3DScene& out, const std::vector<std::vector<R3DInstance>>& instances) {
-    static const bool off = getenv("SWT_NO_GLOW_LIGHT") != nullptr;
+    static const bool off = swt_env_on("SWT_NO_GLOW_LIGHT");
     if (off || out.viewports.empty()) return;
     int low = out.viewports.front().priority;
     struct Found { R3DScene::Glow g; float depth; };

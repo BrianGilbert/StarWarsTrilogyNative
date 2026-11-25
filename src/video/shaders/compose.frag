@@ -18,19 +18,17 @@ layout(set = 0, binding = 0) uniform sampler2D scene3d;
 layout(set = 0, binding = 1) uniform sampler2D layer2d_front;
 layout(set = 0, binding = 2) uniform sampler2D layer2d_back;
 #ifdef FEW_IMAGES
-// GPUs that take few images per shader (r3d_renderer.cpp): 1 = no 2D replacement pictures
+// GPUs that take few images per shader (r3d_renderer.cpp): 1 = no backdrop pictures
 layout(constant_id = 1) const int OVERLAY_SLOTS = 64;
 layout(set = 0, binding = 3) uniform sampler2D overlays[OVERLAY_SLOTS];
 #else
-layout(set = 0, binding = 3) uniform sampler2D overlays[64];   // 2D replacement pictures (pack2d.h)
+layout(set = 0, binding = 3) uniform sampler2D overlays[64];   // backdrop pictures (sky_pack.h)
 #endif
 #define ATMOSPHERE_BINDING 4
 #include "atmosphere.glsl"
-layout(set = 0, binding = 5) uniform sampler2D text_atlas;   // high-resolution text (text_hd.h)
-layout(set = 0, binding = 6) uniform sampler2D text_cells;
 layout(set = 0, binding = 8) uniform sampler2D bloom;   // blurred glow of luminous surfaces (bloom.frag)
 layout(set = 0, binding = 7) uniform sampler2D scene3d_alpha;   // alpha of the 3D image, in red
-layout(set = 0, binding = 9) uniform sampler2D sky_coords;   // backdrop replacements (sky_pack.h, tilegen.h)
+layout(set = 0, binding = 9) uniform sampler2D sky_coords;   // procedural skies (sky_pack.h, tilegen.h)
 layout(set = 0, binding = 10) uniform sampler2D light_shafts;   // rays.frag
 layout(set = 0, binding = 12) uniform sampler2D diffusion;   // the picture behind the HUD, blurred (bloom.frag)
 layout(set = 0, binding = 11) uniform sampler2D exposure_log;   // 1x1: average log brightness of the 3D image, eased
@@ -44,7 +42,7 @@ layout(push_constant) uniform Compose {
     vec2 layer2d;     // x offset and width of the 4:3 2D area inside the 3D view
     vec2 filter2d;    // x: 1 = xBR, 0 = plain pixels; y: window pixels per 2D pixel
     vec4 hud;         // x: shift of the top HUD band to the screen edges (2D pixels); y: 1 = HDR lighting;
-                      // z: brightness offset of the foreground layers (fades), applied to the overlays;
+                      // z: free;
                       // w: 1 = background layers continue beside the 4:3 area
     vec4 sky;         // x: seconds since launch (drift of the procedural clouds);
                       // y > 0: glow mode, for the bloom: only the bright part of the sky, times y;
@@ -172,10 +170,10 @@ vec4 layer(sampler2D tex, vec2 q, ivec2 size) {
     return pc.filter2d.x > 0.5 ? xbr(tex, q, size) : texture(tex, q);
 }
 
-// ---- Backdrop replacements ---------------------------------------------------
-// The back layer pixels that show a replaced backdrop say which picture and
-// which point of its 512x512 layer they show; the picture is sampled in
-// between at full resolution, following the game's scroll.
+// ---- Procedural skies -------------------------------------------------------
+// The back layer pixels that show a procedural sky say which one and which
+// point of its 512x512 layer they show; the sky is drawn in between at full
+// resolution, following the game's scroll.
 
 const uint SKY_FIRST_SLOT = 56u;        // SkyPack::FIRST_SLOT
 
@@ -386,7 +384,7 @@ vec3 sky_space(vec2 p) {
 
 // Which picture and point each back layer pixel shows: sampled in between.
 // dx, dy: screen derivatives of qb * SIZE_BACK / 512 (explicit, as the
-// position wraps every 512 pixels). True where the sky is procedural.
+// position wraps every 512 pixels). True where a procedural sky shows.
 bool sky_layer(vec2 qb, vec2 dx, vec2 dy, inout vec4 back) {
     vec2 pos = qb * vec2(SIZE_BACK);
     ivec2 t = clamp(ivec2(floor(pos)), ivec2(0), SIZE_BACK - 1);
@@ -395,87 +393,33 @@ bool sky_layer(vec2 qb, vec2 dx, vec2 dy, inout vec4 back) {
     uvec4 b = uvec4(round(v * 255.0));
     vec2 at = vec2(b.r | ((b.b & 1u) << 8), b.g | (((b.b >> 1) & 1u) << 8)) + clamp(pos - vec2(t), 0.0, 1.0);
     uint slot = SKY_FIRST_SLOT + ((b.b >> 2) & 7u);
-    // Procedural: its picture is the original, for the trees on the horizon
-    bool procedural = (b.b & 128u) != 0u;
+    // Colours of this sky's band of rows, taken from its original (last row)
+    float y = mod(at.y, 512.0);
+    float fy = clamp(y / 16.0 - 0.5, 0.0, 31.0);
+    int band = int(fy), table = 8 + int((b.b >> 2) & 7u) * 64;
+    int next = min(band + 1, 31);
+    vec3 sky = mix(texelFetch(sky_coords, ivec2(table + band * 2, SIZE_BACK.y), 0).rgb,
+                   texelFetch(sky_coords, ivec2(table + next * 2, SIZE_BACK.y), 0).rgb, fy - float(band));
+    vec3 lit = mix(texelFetch(sky_coords, ivec2(table + band * 2 + 1, SIZE_BACK.y), 0).rgb,
+                   texelFetch(sky_coords, ivec2(table + next * 2 + 1, SIZE_BACK.y), 0).rgb, fy - float(band));
     vec4 s;
-    if (!procedural) {
-        s = textureGrad(overlays[NONUNIFORM(slot)], fract(at / 512.0), dx, dy);
+    if ((b.b & 64u) != 0u) {   // the sky above
+        s = vec4(sky_procedural(vec2(at.x, y - 512.0), pc.sky.x * 0.005, sky, lit), 1.0);
     } else {
-        // Colours of this sky's band of rows, taken from its original (last row)
-        float y = mod(at.y, 512.0);
-        float fy = clamp(y / 16.0 - 0.5, 0.0, 31.0);
-        int band = int(fy), table = 8 + int((b.b >> 2) & 7u) * 64;
-        int next = min(band + 1, 31);
-        vec3 sky = mix(texelFetch(sky_coords, ivec2(table + band * 2, SIZE_BACK.y), 0).rgb,
-                       texelFetch(sky_coords, ivec2(table + next * 2, SIZE_BACK.y), 0).rgb, fy - float(band));
-        vec3 lit = mix(texelFetch(sky_coords, ivec2(table + band * 2 + 1, SIZE_BACK.y), 0).rgb,
-                       texelFetch(sky_coords, ivec2(table + next * 2 + 1, SIZE_BACK.y), 0).rgb, fy - float(band));
-        if ((b.b & 64u) != 0u) {   // the sky above
-            s = vec4(sky_procedural(vec2(at.x, y - 512.0), pc.sky.x * 0.005, sky, lit), 1.0);
-        } else {
-            // Trees on the horizon: the dark parts of the original's bottom rows
-            vec4 o = textureGrad(overlays[NONUNIFORM(slot)], fract(at / 512.0), dx, dy);
-            float tree = y > 455.0 ? 1.0 - smoothstep(0.10, 0.20, dot(o.rgb, vec3(0.2126, 0.7152, 0.0722))) : 0.0;
-            s = vec4(mix(sky_procedural(vec2(at.x, y), pc.sky.x * 0.005, sky, lit), o.rgb * 0.9, tree), 1.0);
-        }
+        // Trees on the horizon: the dark parts of the original's bottom rows
+        // (the sky's picture is the original)
+        vec4 o = textureGrad(overlays[NONUNIFORM(slot)], fract(at / 512.0), dx, dy);
+        float tree = y > 455.0 ? 1.0 - smoothstep(0.10, 0.20, dot(o.rgb, vec3(0.2126, 0.7152, 0.0722))) : 0.0;
+        s = vec4(mix(sky_procedural(vec2(at.x, y), pc.sky.x * 0.005, sky, lit), o.rgb * 0.9, tree), 1.0);
     }
     // Fade offset of the layer pair, in the last row
     vec3 offset = (texelFetch(sky_coords, ivec2((b.b >> 5) & 1u, SIZE_BACK.y), 0).rgb * 255.0 - 128.0) * (2.0 / 255.0);
     back = vec4(clamp(s.rgb + offset, 0.0, 1.0) * s.a, s.a);
-    return procedural;
+    return true;
 }
-
-// ---- High-resolution text ----------------------------------------------------
-// Cells that hold known letters were left out of the foreground layer; the
-// letter is drawn here from the vector-font atlas with the game's colours.
-
-const int TEXT_CELL_TEXELS = 4;
-const int OVERLAY_ROW = 48;          // after the cells: the replacement pictures on screen
-
-// The 2D replacement pictures (pack2d.h) of the foreground or of the layers
-// below the 3D image over `under` (premultiplied), at `pos` in 2D pixels.
-// Listed in the last row of the text cells (text_hd.h): rectangle in cells,
-// then slot in R and 1 in G for the layers below the 3D image.
-vec4 replacement_pictures(vec4 under, vec2 pos, bool below_3d) {
-    int pictures = int(texelFetch(text_cells, ivec2(0, OVERLAY_ROW), 0).r * 255.0 + 0.5);
-    for (int i = 0; i < pictures; i++) {
-        vec4 info = texelFetch(text_cells, ivec2(2 + 2 * i, OVERLAY_ROW), 0);
-        if ((info.g > 0.5) != below_3d) continue;
-        vec4 rect = round(texelFetch(text_cells, ivec2(1 + 2 * i, OVERLAY_ROW), 0) * 255.0) * 8.0;
-        vec2 r = (pos - rect.xy) / (rect.zw - rect.xy);
-        if (all(greaterThanEqual(r, vec2(0.0))) && all(lessThan(r, vec2(1.0)))) {
-            vec4 o = texture(overlays[NONUNIFORM(uint(info.r * 255.0 + 0.5))], r);
-            under = under * (1.0 - o.a) + vec4(clamp(o.rgb + pc.hud.z, 0.0, 1.0) * o.a, o.a);
-        }
-    }
-    return under;
-}
-const int ATLAS_COLS = 16;           // tools/make_text_atlas.py
-const float ATLAS_SLOT = 80.0;       // (8 + 2 * PAD) * SCALE
-const float ATLAS_PAD = 8.0;         // PAD * SCALE
-const float ATLAS_CELL = 64.0;       // 8 * SCALE
 
 vec4 front_layer(vec2 q) {
-    vec4 f = layer(layer2d_front, q, SIZE_2D);
-    vec2 pos = q * vec2(SIZE_2D) / 8.0;
-    ivec2 cell = clamp(ivec2(pos), ivec2(0), SIZE_2D / 8 - 1);
-    ivec2 t = ivec2(cell.x * TEXT_CELL_TEXELS, cell.y);
-    vec4 info = texelFetch(text_cells, t, 0);
-    if (info.a < 0.5) return f;
-    int slot = int(info.r * 255.0 + 0.5) + 256 * int(info.g * 255.0 + 0.5);
-    vec2 local = clamp(pos - vec2(cell), 0.0, 1.0);
-    vec2 corner = vec2(slot % ATLAS_COLS, slot / ATLAS_COLS) * ATLAS_SLOT + ATLAS_PAD;
-    // Explicit mip level: screen derivatives jump at the cell edges, where the
-    // atlas coordinates change slot
-    float lod = max(log2(ATLAS_CELL / 8.0 / max(pc.filter2d.y, 1e-3)), 0.0);
-    vec4 g = textureLod(text_atlas, (corner + local * ATLAS_CELL) / vec2(textureSize(text_atlas, 0)), lod);
-    vec4 top = texelFetch(text_cells, t + ivec2(1, 0), 0);
-    vec4 bottom = texelFetch(text_cells, t + ivec2(2, 0), 0);
-    vec4 edge = texelFetch(text_cells, t + ivec2(3, 0), 0);
-    float ea = g.g * edge.a, fa = g.r * top.a;
-    f = f * (1.0 - ea) + vec4(edge.rgb, 1.0) * ea;   // premultiplied, like the layer
-    f = f * (1.0 - fa) + vec4(mix(top.rgb, bottom.rgb, g.b), 1.0) * fa;
-    return f;
+    return layer(layer2d_front, q, SIZE_2D);
 }
 
 // HDR lighting: below the knee the image is left as the original drew it;
@@ -644,15 +588,9 @@ void main() {
                      all(greaterThanEqual(p, atm.day_rect.xy)) && all(lessThanEqual(p, atm.day_rect.zw))) {
             back = vec4(sky_hoth(p), 1.0);
         }
-        // 2D replacement pictures of the layers below the 3D image (title and
-        // tutorial screens), inside the 4:3 area
-        if (inside_43) back = replacement_pictures(back, q * vec2(SIZE_2D), true);
         vec4 front;
         float shift = pc.hud.x;
         float row = q.y * 384.0;
-        // Where the foreground's replacement pictures are looked up (2D pixels):
-        // moved with the HUD like the foreground itself (-1: none there)
-        vec2 pic_pos = vec2((p.x - pc.layer2d.x) / pc.layer2d.y * 496.0, p.y * 384.0);
         if (shift > 0.0) {
             // On top the score goes to the left edge and the level to the
             // right one; below, the dialogue box (and the credits)
@@ -668,18 +606,14 @@ void main() {
             bool right = top ? xr >= 311.0 : rr >= 278.0 && (rr < 321.5 || xr >= 380.0) && !(xr < 48.0 && rr < 340.0);
             if (gauge) {
                 front = xl >= 0.0 ? front_layer(vec2(max(xl, 0.5) / 496.0, q.y)) : vec4(0.0);
-                pic_pos = vec2(xl, row);
             } else if (!top && row < 278.0) {
                 front = x < 48.0 ? vec4(0.0) : front_layer(q);
             } else if (left && xl >= 0.0) {
                 front = front_layer(vec2(max(xl, 0.5) / 496.0, q.y));
-                pic_pos = vec2(xl, row);
             } else if (right && xr < 496.0) {
                 front = front_layer(vec2(min(xr, 495.5) / 496.0, rr / 384.0));
-                pic_pos = vec2(xr, rr);
             } else {
                 front = vec4(0.0);
-                pic_pos = vec2(-1.0);
             }
         } else {
             front = front_layer(q);
@@ -788,10 +722,6 @@ void main() {
         // With the procedural space behind, the ships and the station a little
         // brighter (gamma), the sky itself as it is
         if (atm.stars[0].w > 0.5) c = mix(c, pow(max(c, vec3(0.0)), vec3(0.85)), clamp(s.a, 0.0, 1.0));
-        // 2D replacement pictures of the foreground: above the 3D image, below
-        // what changed in the 2D layer
-        vec4 pictures = replacement_pictures(vec4(c, 1.0), pic_pos, false);
-        c = pictures.rgb;
         c = c * (1.0 - front.a) + front.rgb;
     }
     // Picture settings from the menu: saturation, then gamma

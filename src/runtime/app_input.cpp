@@ -21,6 +21,7 @@
 #include "../video/tilegen.h"
 
 #include "app_internal.h"
+#include "env_switches.h"
 
 // Keyboard and mouse (only while the window is active):
 //   5 = coin, 1 = start, mouse = the lever (left button fires, right is the
@@ -30,7 +31,7 @@ bool g_block_buttons = false; // after a menu closes: buttons ignored until rele
 static int g_p1_pad = -1;            // the gamepad aiming for player 1; -1: the mouse (whichever moved last)
 
 bool g_pointer_sight = true;   // Star Wars Trilogy: the game's sight goes where the mouse / light gun points
-static const bool g_narrow_aim = getenv("SWT_NARROW_AIM") != nullptr;   // the lever over the 4:3 area only
+static const bool g_narrow_aim = swt_env_on("SWT_NARROW_AIM");   // the lever over the 4:3 area only
 void pointer_sight(float gx, float gy, float& fx, float& fy);
 
 // Window pixels -> fraction of the 4:3 game screen (accounting for the black bars)
@@ -113,7 +114,7 @@ GamepadSettings g_pad_settings;
 
 // The aim assist's targets: a box around each enemy the game placed on
 // screen, from the point it stands on up the body, sized with its distance.
-// In world units (LW_AIM_BOX=up,half_width,half_height to try others)
+// In world units (SWT_AIM_BOX=up,half_width,half_height to try others)
 // Star Wars Trilogy: the targets come from the 3D scene. The enemies are
 // drawn in their own full-screen viewport (not the world's): the models of
 // 100 polygons or more there (TIE fighters, walkers; the small ones are
@@ -181,7 +182,7 @@ void pointer_sight(float gx, float gy, float& fx, float& fy) {
         still_since = now;
         last_fx = fx, last_fy = fy;
     }
-    static const bool log = getenv("SWT_GUN_LOG") != nullptr;
+    static const bool log = swt_env_on("SWT_GUN_LOG");
     static double logged = 0;
     if (log && now - logged > 0.25) {
         logged = now;
@@ -191,8 +192,8 @@ void pointer_sight(float gx, float gy, float& fx, float& fy) {
 }
 
 void collect_scene_targets(const R3DSceneBuilder& builder, R3DScene& scene) {
-    static float radius = getenv("SWT_AIM_RADIUS") ? float(atof(getenv("SWT_AIM_RADIUS"))) : 5.0f;   // world units
-    static const bool space_only = getenv("SWT_SPACE_AIM_ONLY") != nullptr;
+    static float radius = swt_env("SWT_AIM_RADIUS") ? float(atof(swt_env("SWT_AIM_RADIUS"))) : 5.0f;   // world units
+    static const bool space_only = swt_env_on("SWT_SPACE_AIM_ONLY");
     static std::vector<uint32_t> sight_models;   // the models seen as the sight (its parts, each stage's)
     struct SightPart { uint32_t model; float x, y; const R3DViewport* vp; };
     std::vector<SightPart> sight_parts;   // this frame's models where the sight is drawn
@@ -384,7 +385,7 @@ bool poll_gamepads(HWND hwnd) {
         fire_was[i] = fire, reload_was[i] = reload;
         // The lever's force feedback (runtime.cpp ffb_frame): the jolts
         // on the pad that steers (SWT_NO_FFB_RUMBLE: none)
-        static const bool no_ffb = getenv("SWT_NO_FFB_RUMBLE") != nullptr;
+        static const bool no_ffb = swt_env_on("SWT_NO_FFB_RUMBLE");
         if (g_p1_pad == i && !no_ffb) {
             float s = std::min(1.0f, g_ffb_shake.exchange(0.0f) * 2.5f);
             if (s > 0.08f) g_pads.rumble(i, s, 0.6f * s, 60);

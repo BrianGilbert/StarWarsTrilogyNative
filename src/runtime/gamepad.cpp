@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include "inputs.h"
+#include "env_switches.h"
 
 #include <algorithm>
 #include <cmath>
@@ -324,7 +325,7 @@ void Gamepads::poll(const GamepadSettings& set, bool focused, bool menu) {
             // (absolute position, back to the centre when let go), as on the cabinet.
             // By default the sticks move the sight as in Lost World and the lever
             // follows it (the sight stays where it is left)
-            static const bool absolute_env = getenv("SWT_PAD_ABSOLUTE") != nullptr;
+            static const bool absolute_env = swt_env_on("SWT_PAD_ABSOLUTE");
             if (set.lever || absolute_env) {
                 float lvx = 0, lvy = 0;
                 for (auto [axx, axy] : {std::pair{SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY},

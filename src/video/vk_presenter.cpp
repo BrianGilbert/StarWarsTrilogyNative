@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "dlss.h"
+#include "../runtime/env_switches.h"
 
 namespace {
 
@@ -153,7 +154,7 @@ void VkPresenter::restore_display() {   // the monitor back to the desktop's mod
 }
 
 void VkPresenter::set_mode(int mode, int w, int h) {
-    static const bool dry_run = getenv("SWT_DISPLAY_DRYRUN") != nullptr;
+    static const bool dry_run = swt_env_on("SWT_DISPLAY_DRYRUN");
     mode = std::clamp(mode, 0, 2);
     MONITORINFOEXA mi{};
     mi.cbSize = sizeof(mi);
@@ -274,7 +275,7 @@ bool VkPresenter::init(const char* title, int width, int height, bool with_ngx) 
     // Vulkan 1.3, or 1.2 with the one thing of 1.3 the renderer uses, dynamic
     // rendering, as an extension (Mesa's v3dv before 24.3: the Raspberry Pi 5
     // under Raspberry Pi OS Bookworm). SWT_VULKAN_1_2 takes that way on any GPU
-    static const bool only_1_2 = getenv("SWT_VULKAN_1_2") != nullptr;
+    static const bool only_1_2 = swt_env_on("SWT_VULKAN_1_2");
     VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
     app.pApplicationName = "Star Wars Trilogy Native";
     app.apiVersion = only_1_2 ? VK_API_VERSION_1_2 : VK_API_VERSION_1_3;
@@ -460,11 +461,11 @@ bool VkPresenter::init(const char* title, int width, int height, bool with_ngx) 
         VkPhysicalDeviceFeatures2 query{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
         query.pNext = &have;
         vkGetPhysicalDeviceFeatures2(gpu_, &query);
-        // Texture pack: an array of replacement images indexed per polygon. Not
-        // on every GPU (Mesa's v3dv on the Raspberry Pi 5): the renderer then
-        // goes without the replacement pictures (SWT_NO_DESCRIPTOR_INDEXING tries that here)
+        // The backdrop pictures (procedural skies): an array of images indexed
+        // per pixel. Not on every GPU (Mesa's v3dv on the Raspberry Pi 5): the
+        // renderer then goes without them (SWT_NO_DESCRIPTOR_INDEXING tries that here)
         descriptor_indexing_ = have.descriptorBindingPartiallyBound && have.descriptorBindingUpdateUnusedWhilePending &&
-                               have.shaderSampledImageArrayNonUniformIndexing && !getenv("SWT_NO_DESCRIPTOR_INDEXING");
+                               have.shaderSampledImageArrayNonUniformIndexing && !swt_env("SWT_NO_DESCRIPTOR_INDEXING");
         f12.descriptorBindingPartiallyBound = descriptor_indexing_;
         f12.descriptorBindingUpdateUnusedWhilePending = descriptor_indexing_;
         f12.shaderSampledImageArrayNonUniformIndexing = descriptor_indexing_;

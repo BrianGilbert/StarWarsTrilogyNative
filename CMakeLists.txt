@@ -64,9 +64,9 @@ foreach(name r3d ao)
         COMMENT "Shader ${name}.frag (ray tracing)")
     list(APPEND SHADER_HEADERS ${out})
 endforeach()
-# Again with the image arrays sized at pipeline creation, for GPUs that take
-# few images per shader (r3d_renderer.cpp): r3d_few.frag.h, compose_few.frag.h
-foreach(name r3d compose)
+# Again with the image array sized at pipeline creation, for GPUs that take
+# few images per shader (r3d_renderer.cpp): compose_few.frag.h
+foreach(name compose)
     set(out ${SHADER_OUT}/${name}_few.frag.h)
     add_custom_command(OUTPUT ${out}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT}
@@ -76,9 +76,9 @@ foreach(name r3d compose)
         COMMENT "Shader ${name}.frag (few images)")
     list(APPEND SHADER_HEADERS ${out})
 endforeach()
-# Again with one picture per array and no descriptor indexing, for GPUs
-# without it (Mesa's v3dv, the Raspberry Pi 5): r3d_plain.frag.h, compose_plain.frag.h
-foreach(name r3d compose)
+# Again with one picture in the array and no descriptor indexing, for GPUs
+# without it (Mesa's v3dv, the Raspberry Pi 5): compose_plain.frag.h
+foreach(name compose)
     set(out ${SHADER_OUT}/${name}_plain.frag.h)
     add_custom_command(OUTPUT ${out}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_OUT}
@@ -275,6 +275,7 @@ add_executable(StarWarsTrilogy WIN32
     src/runtime/app_files.cpp
     src/runtime/app_input.cpp
     src/runtime/settings_bridge.cpp
+    src/runtime/env_switches.cpp
     src/runtime/eeprom.cpp
     src/runtime/disk_writer.cpp
     src/runtime/jtag.cpp
@@ -289,10 +290,7 @@ add_executable(StarWarsTrilogy WIN32
     src/runtime/rom_zip.cpp
     ${MINIZ_DIR}/miniz.c
     src/video/tilegen.cpp
-    src/video/texture_pack.cpp
-    src/video/pack2d.cpp
     src/video/sky_pack.cpp
-    src/video/text_hd.cpp
     src/video/image_io.cpp
     src/video/vk_presenter.cpp
     src/video/ui_overlay.cpp
@@ -359,7 +357,7 @@ if(APPLE)
     target_include_directories(StarWarsTrilogy PRIVATE ${MAC_DIR} src/audio src/ui)
     target_link_libraries(StarWarsTrilogy PRIVATE SDL3::SDL3-static
         "-framework Foundation" "-framework CoreGraphics" "-framework CoreText" "-framework CoreVideo"
-        "-framework CoreMedia" "-framework ImageIO" "-framework UniformTypeIdentifiers"
+        "-framework CoreMedia" "-framework ImageIO"
         "-framework AVFoundation" "-framework Accelerate")
     # The windows.h, compat.h and the rest of the Win32 names for every file.
     # As MSVC builds it for Windows: a*b+c stays two operations (the game's
@@ -405,15 +403,13 @@ elseif(WIN32)
     endif()
 endif()
 
-# Unit tests (ctest): the 2D composition against golden hashes, the FNV-1a
-# hash of C++ and Python against the same vectors, the command-line table and
-# the audio queue and the ROM layout read from the zip.
+# Unit tests (ctest): the 2D composition against golden hashes, the
+# command-line table, the audio queue and the ROM layout read from the zip.
 # build.bat runs them.
-option(LW_TESTS "Build the unit tests" ON)
-if(LW_TESTS)
+option(SWT_TESTS "Build the unit tests" ON)
+if(SWT_TESTS)
     enable_testing()
     add_executable(tilegen_test tests/tilegen_test.cpp tests/stubs.cpp src/video/tilegen.cpp)
-    add_executable(fnv_test tests/fnv_test.cpp)
     add_executable(options_test tests/options_test.cpp src/runtime/options.cpp src/runtime/settings_bridge.cpp)
     add_executable(audio_stream_test tests/audio_stream_test.cpp src/audio/audio_stream.cpp)
     add_executable(rom_zip_test tests/rom_zip_test.cpp src/runtime/rom_zip.cpp ${MINIZ_DIR}/miniz.c)
@@ -428,7 +424,7 @@ if(LW_TESTS)
     add_executable(achievements_csv_test tests/achievements_csv_test.cpp src/runtime/achievements_csv.cpp src/runtime/disk_writer.cpp)
     target_include_directories(achievements_csv_test PRIVATE ${ICONS_DIR})
     add_executable(disk_writer_test tests/disk_writer_test.cpp src/runtime/disk_writer.cpp)
-    foreach(t tilegen_test fnv_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test ${MENU_MUSIC_TEST}
+    foreach(t tilegen_test options_test audio_stream_test rom_zip_test jtag_test r3d_state_test ${MENU_MUSIC_TEST}
             achievements_csv_test disk_writer_test)
         target_include_directories(${t} PRIVATE src/video src/common src/runtime src/audio src/ui ${MINIZ_DIR})
         if(MSVC)
@@ -444,7 +440,6 @@ if(LW_TESTS)
         endif()
     endforeach()
     add_test(NAME tilegen COMMAND tilegen_test ${CMAKE_SOURCE_DIR}/tests/tilegen_expected.txt)
-    add_test(NAME fnv_cpp COMMAND fnv_test ${CMAKE_SOURCE_DIR}/tests/fnv_expected.txt)
     add_test(NAME options COMMAND options_test)
     add_test(NAME audio_stream COMMAND audio_stream_test)
     add_test(NAME rom_zip COMMAND rom_zip_test)
@@ -454,12 +449,5 @@ if(LW_TESTS)
     add_test(NAME disk_writer COMMAND disk_writer_test)
     if(NOT APPLE)
         add_test(NAME menu_music COMMAND menu_music_test)
-    endif()
-    # 3.10: the version the tools need, so an older Python in PATH is skipped (issue #51).
-    # By its path: as a target, a cross build would run it through the emulator
-    find_package(Python3 3.10 COMPONENTS Interpreter)
-    if(Python3_Interpreter_FOUND)
-        add_test(NAME fnv_python COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/fnv_test.py
-                 ${CMAKE_SOURCE_DIR}/tests/fnv_expected.txt)
     endif()
 endif()

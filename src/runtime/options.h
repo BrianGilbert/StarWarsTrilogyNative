@@ -31,21 +31,15 @@ struct Options {
     bool pixel_2d = false;           // --pixel2d: 2D layers without xBR upscaling
     bool hud_centre = false;         // --hud-centre: keep the HUD in the 4:3 area
     bool letterbox = false;          // --letterbox: keep the black cutscene bars
-    bool classic_text = false;       // --classic-text: original pixel-art letters instead of vector fonts
     bool interp = true;              // --no-interp: show game frames as they are
-    bool dump_textures = false;      // --dump-textures: write new textures to out/textures
     float light_gain = 1.0f;         // --light-gain: light multiplier on the sun and the ambient
     float bloom = 1;                 // --bloom [N] / --no-bloom: glow around bright things
     float ao = 1;                    // --ao [N] / --no-ao: ambient occlusion (up to 1)
     float haze = 1;                  // --haze [N] / --no-haze: distance haze that hides the draw distance
     float saturation = 0.8f;         // --saturation: colour saturation (1 = original)
     float gamma = 1;                 // --gamma: 1 = original, higher = brighter
-    bool sky_procedural = true;      // --sky original|procedural: drawn sky instead of the original picture
     bool hdr = true;                 // --no-hdr: the original's clipped lighting
-    bool relief = true;              // --no-relief: flat textures, as in the original
     bool sharpen = true;             // --no-sharpen: no sharpening of the 3D image
-    bool shafts = true;              // --no-shafts: no light shafts from the sun
-    bool soft = true;                // --no-soft: hard edges where translucent effects meet geometry
     bool shadows = true;             // --no-shadows: no sun shadows
     int ray_tracing = 2;             // --rt off|shadows|ao (--no-rt): traced sun shadows (1) and ambient occlusion (2)
     bool sun = true;                 // --no-sun: no sun in the procedural sky

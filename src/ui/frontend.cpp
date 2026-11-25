@@ -13,6 +13,7 @@
 
 #include <wincodec.h>
 
+#include "../runtime/env_switches.h"
 #ifndef _WIN32
 #include "../video/image_io.h"
 #endif
@@ -344,11 +345,7 @@ const wchar_t* const Frontend::TAB_NAMES[Frontend::TAB_COUNT] = {L"EXPERIENCE", 
 // Every settings option: its section, within the section the order shown, and
 // the heading of each group of rows (on its first one). This is the one place
 // to put a new option (besides `all` in items()); an option missing here is
-// not shown: HD text (from Lost World) and those that changed nothing in Star
-// Wars when measured on snapshots of Yavin, Hoth and Endor
-// (tools/option_sweep.py: procedural sky, light shafts, soft particles,
-// surface detail). Their settings.ini keys stay. A section whose
-// rows do not fit the page scrolls.
+// not shown. A section whose rows do not fit the page scrolls.
 const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_EXPERIENCE, EXPERIENCE_TAB, L"EDITION"}, {OPT_ARCADE_ASPECT, EXPERIENCE_TAB},
     {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_RESOLUTION, DISPLAY_TAB}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB},
@@ -428,7 +425,7 @@ std::vector<Frontend::Item> Frontend::items() const {
         // DEBUG is for testing only: shown while the port is being tested;
         // for the release kShowDebugMenu goes false (SWT_DEBUG_MENU still shows it)
         constexpr bool kShowDebugMenu = false;
-        static const bool debug_menu = kShowDebugMenu || getenv("SWT_DEBUG_MENU") != nullptr;
+        static const bool debug_menu = kShowDebugMenu || swt_env_on("SWT_DEBUG_MENU");
         if (debug_menu) list.insert(list.begin() + 1, {DEBUG, L"DEBUG", L"", L"Straight to any phase of any stage (for testing)"});
         return list;
     }

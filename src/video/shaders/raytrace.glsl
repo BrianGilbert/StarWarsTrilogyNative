@@ -1,7 +1,7 @@
 // Ray traced effects (r3d_raytrace.h): the opaque world of this image in an
 // acceleration structure, and the texture of its cut-out triangles. The
 // includer defines RT_SET (the descriptor set of the 3D pass, whose bindings
-// 6 and 7 these are) and declares texture_ram and replacements in it.
+// 6 and 7 these are) and declares texture_ram in it.
 #include "r3d_texture.glsl"
 
 const uint RT_LOW = 1u, RT_HIGH = 2u;   // R3DRayTracer instance masks: casters near the ground, what is higher up
@@ -9,8 +9,9 @@ const uint RT_LOW = 1u, RT_HIGH = 2u;   // R3DRayTracer instance masks: casters 
 layout(set = RT_SET, binding = 6) uniform accelerationStructureEXT world_rays;
 struct Cutout {
     vec2 uv[3];
-    uint tex, flags, replace;
+    uint tex, flags;
     float alpha;
+    uint pad;   // (std430 rounds the struct to 8 bytes anyway)
 };
 layout(std430, set = RT_SET, binding = 7) readonly buffer Cutouts { Cutout cutouts[]; };
 
@@ -19,20 +20,13 @@ layout(std430, set = RT_SET, binding = 7) readonly buffer Cutouts { Cutout cutou
 bool cutout_blocks(uint index, vec2 bary) {
     Cutout c = cutouts[index];
     vec2 uv = c.uv[0] * (1.0 - bary.x - bary.y) + c.uv[1] * bary.x + c.uv[2] * bary.y;
-    float a;
-    if (c.replace != 0u) {
-        if ((c.flags & MIRROR_U) != 0u) { float m = mod(uv.x, 2.0); uv.x = m > 1.0 ? 2.0 - m : m; }
-        if ((c.flags & MIRROR_V) != 0u) { float m = mod(uv.y, 2.0); uv.y = m > 1.0 ? 2.0 - m : m; }
-        a = textureLod(replacements[nonuniformEXT(c.replace)], uv, 0.0).a;
-    } else {
-        ivec2 base = ivec2(int(c.tex & 2047u), int((c.tex >> 11) & 2047u));
-        ivec2 size = ivec2(32 << int((c.tex >> 22) & 7u), 32 << int((c.tex >> 25) & 7u));
-        ivec2 t = ivec2(floor(uv * vec2(size)));
-        t.x = wrap(t.x, size.x, (c.flags & MIRROR_U) != 0u);
-        t.y = wrap(t.y, size.y, (c.flags & MIRROR_V) != 0u);
-        ivec2 p = ivec2((base.x + t.x) & 2047, (base.y & 1024) | ((base.y + t.y) & 1023));
-        a = decode(texelFetch(texture_ram, p, 0).r, (c.tex >> 28) & 15u).a;
-    }
+    ivec2 base = ivec2(int(c.tex & 2047u), int((c.tex >> 11) & 2047u));
+    ivec2 size = ivec2(32 << int((c.tex >> 22) & 7u), 32 << int((c.tex >> 25) & 7u));
+    ivec2 t = ivec2(floor(uv * vec2(size)));
+    t.x = wrap(t.x, size.x, (c.flags & MIRROR_U) != 0u);
+    t.y = wrap(t.y, size.y, (c.flags & MIRROR_V) != 0u);
+    ivec2 p = ivec2((base.x + t.x) & 2047, (base.y & 1024) | ((base.y + t.y) & 1023));
+    float a = decode(texelFetch(texture_ram, p, 0).r, (c.tex >> 28) & 15u).a;
     // Alpha test: what the 3D pass keeps; texture alpha: only its solid texels
     // are in the opaque pass
     return (c.flags & ALPHA_TEST) != 0u ? a >= 32.0 / 255.0 : a * c.alpha >= 0.5;

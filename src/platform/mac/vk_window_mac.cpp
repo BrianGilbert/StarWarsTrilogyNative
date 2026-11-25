@@ -16,6 +16,7 @@
 #include <string>
 
 #include "platform_mac.h"
+#include "../../runtime/env_switches.h"
 
 namespace {
 
@@ -58,7 +59,7 @@ SDL_Scancode mac_scancode(int vk) {
 
 bool VkPresenter::create_window(const char* title, int width, int height) {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-    g_background = getenv("SWT_BACKGROUND") != nullptr;
+    g_background = swt_env_on("SWT_BACKGROUND");
     if (g_background) {
         SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");
         SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");

@@ -34,20 +34,18 @@
 #include "../ui/achievement_toast.h"
 #include "../ui/frontend.h"
 #include "../ui/menu_music.h"
-#include "../video/pack2d.h"
 #include "../video/r3d_renderer.h"
 #include "../video/r3d_scene.h"
 #include "../video/r3d_screen.h"
 #include "../video/r3d_state.h"
 #include "../video/sky_pack.h"
-#include "../video/text_hd.h"
-#include "../video/texture_pack.h"
 #include "../video/tilegen.h"
 #include "../video/ui_overlay.h"
 #include "../video/vk_presenter.h"
 
 
 #include "app_internal.h"
+#include "env_switches.h"
 
 // Debugging aid for --shot: every triangle with its screen bounding box
 // (native pixels), plus the 2D layers' alpha along two columns
@@ -190,7 +188,7 @@ static std::string full_path(const std::string& path) {
 bool load_game_rom(std::vector<uint8_t>& sound_program, std::vector<uint8_t>& sound_samples,
                           std::vector<uint8_t>& dsb_program, std::vector<uint8_t>& dsb_mpeg) {
     std::string zip = g_opt.rom_zip;
-    if (zip.empty() && getenv("SWT_ROM_ZIP")) zip = getenv("SWT_ROM_ZIP");
+    if (zip.empty() && swt_env("SWT_ROM_ZIP")) zip = swt_env("SWT_ROM_ZIP");
     std::vector<std::string> looked;   // full paths, for the error
     auto missing = [&](const std::string& path) {
         std::string f = full_path(path);

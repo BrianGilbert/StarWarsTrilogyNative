@@ -4,6 +4,7 @@
 
 #include "r3d_explosions.h"
 #include "r3d_screen.h"
+#include "../runtime/env_switches.h"
 
 #include <algorithm>
 #include <array>
@@ -146,12 +147,10 @@ void R3DSceneBuilder::build(const R3DFrameState& state, R3DScene& out) {
     r3d_hide_wires(out);
     out.sky_dome_hidden = procedural_sky_ && r3d_hide_sky_dome(out);
     auto t3 = clock::now();
-    if (pack_ && texture_ram_ && pack_->active()) apply_texture_pack(out);
-    auto t4 = clock::now();
     link_previous(out);
     r3d_swt_explosions(out, viewport_instances_);   // adds vertices: after the pairing
-    auto t5 = clock::now();
-    stage_ms_[0] = ms(t0, t1), stage_ms_[1] = ms(t1, t2), stage_ms_[2] = ms(t2, t3), stage_ms_[3] = ms(t3, t4), stage_ms_[4] = ms(t4, t5);
+    auto t4 = clock::now();
+    stage_ms_[0] = ms(t0, t1), stage_ms_[1] = ms(t1, t2), stage_ms_[2] = ms(t2, t3), stage_ms_[3] = ms(t3, t4);
 }
 
 uint32_t R3DSceneBuilder::instance_key(uint32_t model_addr) {
@@ -384,19 +383,6 @@ uint32_t R3DSceneBuilder::KeyIndex::find(uint64_t key) const {
     }
 }
 
-// Marks every textured triangle with its replacement slot (0 = none)
-void R3DSceneBuilder::apply_texture_pack(R3DScene& out) {
-    frame_slots_.clear();
-    for (size_t i = 0; i + 2 < out.vertices.size(); i += 3) {
-        R3DVertex* tri = &out.vertices[i];
-        if (!(tri[0].flags & R3D_TEXTURED)) continue;
-        auto it = frame_slots_.find(tri[0].tex);
-        uint32_t slot = it != frame_slots_.end() ? it->second
-                                                 : (frame_slots_[tri[0].tex] = pack_->lookup(tri[0].tex, *texture_ram_));
-        tri[0].replace = tri[1].replace = tri[2].replace = slot;
-    }
-}
-
 void R3DSceneBuilder::viewport(uint32_t addr, int depth) {
     if (depth > 64 || !rd_.cull_valid(addr) || !visited_viewports_.insert(addr & 0xFFFFFF).second) return;
     auto vp = [&](uint32_t i) { return rd_.cull(addr + i); };
@@ -455,7 +441,7 @@ void R3DSceneBuilder::viewport(uint32_t addr, int depth) {
         v.fog_density = density < 99999.0f ? density : 0.0f;
         v.fog_start = float(int16_t(vp(0x25) & 0xFFFF)) / 255.0f;
         v.fog_ambient = float((vp(0x25) >> 16) & 0xFF) / 255.0f;
-        static const bool debug_no_fog = getenv("LW_NOFOG") != nullptr;   // debugging aid
+        static const bool debug_no_fog = swt_env_on("SWT_NOFOG");   // debugging aid
         if (debug_no_fog) v.fog_density = v.fog_start = 0;
         v.scroll_fog = float(vp(0x20) & 0xFF) / 255.0f;
         v.scroll_attenuation = float(vp(0x24) & 0xFF) / 255.0f;
@@ -608,7 +594,7 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
     // switched on 1.4 times as far as the game asks, fading in there as it does
     // (SWT_LOD=1 keeps the original distances)
     static const float lod_far = [] {
-        const char* e = getenv("SWT_LOD");
+        const char* e = swt_env("SWT_LOD");
         float f = e ? float(atof(e)) : 1.4f;   // (2 hung the window in the trench: too many polygons)
         return f > 0.1f ? f : 1.0f;
     }();
@@ -620,11 +606,11 @@ void R3DSceneBuilder::node(uint32_t addr, const Mat& parent, Attribs a, int dept
     }
     // (SWT_LOD_FADE: how much longer the detail takes to fade in, 1 = the game's)
     static const float lod_fade = [] {
-        const char* e = getenv("SWT_LOD_FADE");
+        const char* e = swt_env("SWT_LOD_FADE");
         float f = e ? float(atof(e)) : 4.0f;
         return f >= 1.0f ? f : 1.0f;
     }();
-    static const bool debug_no_lod = getenv("LW_NOLOD") != nullptr;   // debugging aid
+    static const bool debug_no_lod = swt_env_on("SWT_NOLOD");   // debugging aid
     if (!debug_no_lod && !a.no_cull && !no_lod && lod_scale < del[3]) return;   // too far away
 
     uint32_t child = w[7] & 0x07FFFFFF;
@@ -784,7 +770,6 @@ void R3DSceneBuilder::model(uint32_t addr, const Mat& m, const Attribs& a) {
                     out[i].shade = v[i].shade;
                     out[i].fog = fog;
                     out[i].spec = spec_coef;
-                    out[i].replace = 0;
                 }
                 // Back-face test with the face normal (spec 5.4)
                 float fn[3];
@@ -816,7 +801,7 @@ void R3DSceneBuilder::model(uint32_t addr, const Mat& m, const Attribs& a) {
                 // words (as out/scene.txt and the F9 .txt print them) are not drawn
                 static const std::vector<uint32_t> hide_tex = [] {
                     std::vector<uint32_t> list;
-                    if (const char* e = getenv("SWT_HIDE_TEX"))
+                    if (const char* e = swt_env("SWT_HIDE_TEX"))
                         for (const char* q = e; *q;) {
                             char* end = nullptr;
                             unsigned long w = strtoul(q, &end, 16);

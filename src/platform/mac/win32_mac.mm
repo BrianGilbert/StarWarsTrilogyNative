@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "platform_mac.h"
+#include "../../runtime/env_switches.h"
 
 namespace {
 
@@ -286,7 +287,7 @@ short GetAsyncKeyState(int vk) {
 BOOL SetWindowTextA(HWND hwnd, const char* text) { return SDL_SetWindowTitle(reinterpret_cast<SDL_Window*>(hwnd), text); }
 
 int MessageBoxA(HWND hwnd, const char* text, const char* title, UINT) {
-    if (getenv("SWT_BACKGROUND")) {
+    if (swt_env("SWT_BACKGROUND")) {
         fprintf(stderr, "[%s] %s\n", title, text);
         return 1;
     }

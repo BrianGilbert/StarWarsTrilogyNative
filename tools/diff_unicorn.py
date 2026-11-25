@@ -120,8 +120,8 @@ def main():
         uc_.emu_stop()
 
     uc.hook_add(UC_HOOK_BLOCK, on_block)
-    if os.environ.get("LW_TRACE_RANGE"):   # e.g. 800-900: print each instruction in that range
-        lo_t, hi_t = (int(x, 16) for x in os.environ["LW_TRACE_RANGE"].split("-"))
+    if os.environ.get("SWT_TRACE_RANGE"):   # e.g. 800-900: print each instruction in that range
+        lo_t, hi_t = (int(x, 16) for x in os.environ["SWT_TRACE_RANGE"].split("-"))
         from unicorn import UC_HOOK_CODE
 
         def on_code(uc_, addr, size, user):

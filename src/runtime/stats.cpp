@@ -29,6 +29,7 @@
 #include <string>
 
 #include "ppc_rt.h"
+#include "env_switches.h"
 
 namespace {
 
@@ -394,7 +395,7 @@ void stats_frame() {
         hooked = true;
         for (uint32_t fn : FN_RESULTS) g_trace_bits[(fn >> 5) & 511] |= uint8_t(1 << ((fn >> 2) & 7));
     }
-    static const bool duel_original = getenv("SWT_DUEL_ORIGINAL") != nullptr;
+    static const bool duel_original = swt_env_on("SWT_DUEL_ORIGINAL");
     bool playing = swt_playing();
     uint32_t st = rd32(TOP_STATE);
     g_swt_duel = playing && st >= 10 && st <= 13 && !duel_original;

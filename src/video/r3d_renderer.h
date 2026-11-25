@@ -14,10 +14,7 @@
 #include "dlss.h"
 #include "r3d_raytrace.h"
 #include "r3d_scene.h"
-#include "pack2d.h"
 #include "sky_pack.h"
-#include "text_hd.h"
-#include "texture_pack.h"
 #include "vk_presenter.h"
 
 // Placement of the picture in the window. The 3D view can be wider than the
@@ -45,9 +42,7 @@ public:
     bool dlaa_active() const { return dlaa_.ready(); }
     bool dlss_upscaling() const { return dlaa_.ready() && upscale_ > 1.0f; }
     int dlss_preset() const { return dlss_preset_; }   // the NGX preset in use (dlss::PRESET_*), 0 without DLSS
-    // Image slots this GPU can bind (slot 0 = none): the texture pack's and the
-    // 2D replacement pictures' (1 = none: the 2D and backdrop packs are off)
-    uint32_t replacement_slots() const { return replace_slots_; }
+    // Backdrop picture slots this GPU can bind (1 = none: no procedural skies)
     uint32_t overlay_slots() const { return overlay_slots_; }
 
     // How much light the scene is given: a multiplier on the sun and on the ambient.
@@ -64,18 +59,8 @@ public:
         scene_serial_++;
     }
     void set_layers(const uint32_t* back, const uint32_t* front);   // 496x384 BGRA each
-    // High-resolution text: the glyph atlas (once) and, with every set_layers,
-    // the text cells (TextHD::CELLS_X x CELLS_Y x CELL_TEXELS BGRA texels)
-    void set_text_atlas(const TextHD& text);
-    void set_text_cells(const uint32_t* cells);
     void upload_texture_rows(const std::vector<uint16_t>& rows, int y0, int y1);
-    // Texture pack images, uploaded with a full mip chain into their slots
-    void add_replacements(const std::vector<RgbaImage>& images);
-    // 2D replacement pictures (those on screen are listed in the text cells,
-    // see text_hd.h) and the fade offset applied to them
-    void add_overlays(const std::vector<RgbaImage>& images);
-    void set_overlay_brightness(float brightness) { overlay_brightness_ = brightness; }
-    // Backdrop replacement pictures, and with every set_layers which one each
+    // Procedural sky pictures (SkyPack), and with every set_layers which one each
     // back layer pixel shows (TileGen::SKY_COORDS_W x SKY_COORDS_H BGRA texels)
     void add_sky_pictures(const std::vector<RgbaImage>& images);
     void set_sky_coords(const uint32_t* coords);
@@ -198,8 +183,7 @@ private:
     // w, h: the 3D image as drawn; up_w, up_h: as DLSS hands it on (the same but with DLSS upscaling)
     void ensure_targets(uint32_t w, uint32_t h, uint32_t up_w, uint32_t up_h);
     void upload_slot(VkDescriptorSet set, uint32_t binding, VkSampler sampler, uint32_t slot, int w, int h,
-                     const std::vector<uint8_t>& rgba,
-                     bool replace = false);   // replace: the slot's previous picture is freed
+                     const std::vector<uint8_t>& rgba);   // the slot's previous picture is freed
 
     // record(), pass by pass. Frame: what they all need; ComposePush: the
     // push constants of compose.frag (both defined in r3d_renderer.cpp)
@@ -224,15 +208,15 @@ private:
     float supersample_ = 1.0f;
     VkSampleCountFlagBits samples_ = VK_SAMPLE_COUNT_1_BIT;
     float aniso_ = 0.0f;
-    // Image arrays (init): in update-after-bind sets and/or shrunk to the GPU's
-    // limits; the _few shaders take the sizes as specialisation constants 0 and 1
-    uint32_t replace_slots_ = 4096, overlay_slots_ = 64;
+    // The backdrop pictures' image array (init): in an update-after-bind set and/or
+    // shrunk to the GPU's limits; the _few shader takes the size as specialisation constant 1
+    static constexpr uint32_t OVERLAY_SLOTS = SkyPack::LAST_SLOT + 1;
+    uint32_t overlay_slots_ = OVERLAY_SLOTS;
     bool update_after_bind_ = false, few_images_ = false;
     bool no_indexing_ = false;   // no descriptor indexing (VkPresenter::descriptor_indexing)
     const R3DScene* scene_ = nullptr;
 
-    Image text_cells_;   // per 8x8 cell of the foreground: high-resolution text slot and colours
-    Image sky_coords_;   // per back layer pixel: backdrop replacement picture and position (tilegen.h)
+    Image sky_coords_;   // per back layer pixel: procedural sky picture and position (tilegen.h)
     Image texture_ram_, back_, front_, color_, depth_, color_ms_;   // color_ms_: MSAA target, resolved into color_
     Image motion_, dlaa_out_;   // DLAA: motion vectors (pixels, RG16F) and the anti-aliased image
     Image dlaa_alpha_;          // DLAA of the 3D image's alpha (in red), which the composition uses
@@ -322,11 +306,8 @@ private:
     bool layers_dirty_ = false;
     int tex_y0_ = 0, tex_y1_ = 0;
 
-    std::vector<Image> replacements_;
-    std::unordered_map<uint32_t, Image> overlay_images_;   // 2D replacement and backdrop pictures by slot
-    VkSampler nearest_ = VK_NULL_HANDLE, linear_ = VK_NULL_HANDLE, replace_sampler_ = VK_NULL_HANDLE,
-              overlay_sampler_ = VK_NULL_HANDLE;
-    float overlay_brightness_ = 0;
+    std::unordered_map<uint32_t, Image> overlay_images_;   // backdrop pictures by slot
+    VkSampler nearest_ = VK_NULL_HANDLE, linear_ = VK_NULL_HANDLE, overlay_sampler_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout r3d_set_layout_ = VK_NULL_HANDLE, compose_set_layout_ = VK_NULL_HANDLE;
     VkDescriptorPool pool_ = VK_NULL_HANDLE;
     VkDescriptorSet r3d_set_ = VK_NULL_HANDLE, compose_set_ = VK_NULL_HANDLE;

@@ -1,11 +1,10 @@
-// macOS: png_load and png_save (image_io.h) through ImageIO. Any format it can
+// macOS: png_load (image_io.h) through ImageIO. Any format it can
 // read (the menus' JPEG too), with straight alpha as WIC gives it.
 #include "image_io.h"
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <algorithm>
 #include <cstring>
@@ -60,27 +59,3 @@ bool png_load(const std::string& path, int& w, int& h, std::vector<uint8_t>& rgb
     }
 }
 
-bool png_save(const std::string& path, int w, int h, const uint8_t* rgba) {
-    @autoreleasepool {
-        NSData* pixels = [NSData dataWithBytes:rgba length:size_t(w) * h * 4];
-        CGDataProviderRef provider = CGDataProviderCreateWithCFData((__bridge CFDataRef)pixels);
-        CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
-        CGImageRef image = CGImageCreate(size_t(w), size_t(h), 8, 32, size_t(w) * 4, rgb,
-                                         kCGImageAlphaLast | kCGBitmapByteOrder32Big, provider, nullptr, false,
-                                         kCGRenderingIntentDefault);
-        CGColorSpaceRelease(rgb);
-        CGDataProviderRelease(provider);
-        if (!image) return false;
-        NSURL* url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path.c_str()]];
-        CGImageDestinationRef dest = CGImageDestinationCreateWithURL((__bridge CFURLRef)url,
-                                                                     (__bridge CFStringRef)UTTypePNG.identifier, 1, nullptr);
-        bool ok = false;
-        if (dest) {
-            CGImageDestinationAddImage(dest, image, nullptr);
-            ok = CGImageDestinationFinalize(dest);
-            CFRelease(dest);
-        }
-        CGImageRelease(image);
-        return ok;
-    }
-}

@@ -15,6 +15,7 @@
 #include <string>
 
 #include "platform_mac.h"
+#include "../../runtime/env_switches.h"
 
 namespace {
 
@@ -55,7 +56,7 @@ SDL_Scancode mac_scancode(int vk) {
 }
 
 bool VkPresenter::create_window(const char* title, int width, int height) {
-    g_background = getenv("SWT_BACKGROUND") != nullptr;
+    g_background = swt_env_on("SWT_BACKGROUND");
     if (g_background) SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");   // the click that brings the window up counts

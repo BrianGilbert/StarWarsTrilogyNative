@@ -14,11 +14,8 @@ VARIANTS = [
     ("base", []), ("base2", []),
     ("nosun", ["--no-sun"]), ("noshadows", ["--no-shadows"]),
     ("rtoff", ["--rt", "off"]), ("rtshadows", ["--rt", "shadows"]),
-    ("noshafts", ["--no-shafts"]), ("nohdr", ["--no-hdr"]), ("noao", ["--no-ao"]),
-    ("nobloom", ["--no-bloom"]), ("norelief", ["--no-relief"]),
-    ("nosoft", ["--no-soft"]), ("nosharpen", ["--no-sharpen"]), ("nohaze", ["--no-haze"]),
-    ("skyoriginal", ["--sky", "original"]),
-    ("classictext", ["--classic-text"]),
+    ("nohdr", ["--no-hdr"]), ("noao", ["--no-ao"]), ("nobloom", ["--no-bloom"]),
+    ("nosharpen", ["--no-sharpen"]), ("nohaze", ["--no-haze"]),
 ]
 
 

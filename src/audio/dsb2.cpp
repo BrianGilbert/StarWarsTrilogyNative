@@ -10,6 +10,8 @@
 #define MINIMP3_NO_SIMD   // the decoder runs a few frames per video frame: plain C is plenty
 #include "minimp3.h"
 
+#include "../runtime/env_switches.h"
+
 extern "C" {
 #include "m68k.h"
 }
@@ -18,7 +20,7 @@ Dsb2* g_dsb_bus = nullptr;   // the bus the Musashi callbacks use while the DSB2
 
 namespace {
 // SWT_DSB_LOG: every command byte, decoder byte and stream started
-const bool g_log = getenv("SWT_DSB_LOG") != nullptr;
+const bool g_log = swt_env_on("SWT_DSB_LOG");
 constexpr int kClock = 11000000;           // 68000 clock
 constexpr int kTimerPeriod = kClock / 1000;  // level 2 interrupt at 1 kHz
 constexpr uint32_t kRamBase = 0xF00000, kRamSize = 0x20000;

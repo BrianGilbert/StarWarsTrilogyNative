@@ -1,14 +1,11 @@
+// Windows: png_load (image_io.h) through Windows Imaging Component. macOS and
+// Linux have their own: src/platform/mac/image_io_mac.mm, src/platform/linux/image_io_linux.cpp.
 #include "image_io.h"
 
-#include <windows.h>
 #ifdef _WIN32
+#include <windows.h>
 #include <wincodec.h>
-#endif
 
-#include <cstdio>
-#include <utility>
-
-#ifdef _WIN32   // src/platform/mac/image_io_mac.mm, src/platform/linux/image_io_linux.cpp
 namespace {
 
 IWICImagingFactory* wic() {
@@ -49,51 +46,4 @@ bool png_load(const std::string& path, int& w, int& h, std::vector<uint8_t>& rgb
     if (dec) dec->Release();
     return ok;
 }
-
-bool png_save(const std::string& path, int w, int h, const uint8_t* rgba) {
-    IWICImagingFactory* f = wic();
-    if (!f) return false;
-    IWICStream* stream = nullptr;
-    IWICBitmapEncoder* enc = nullptr;
-    IWICBitmapFrameEncode* frame = nullptr;
-    bool ok = false;
-    // The PNG encoder takes BGRA
-    std::vector<uint8_t> bgra(rgba, rgba + size_t(w) * h * 4);
-    for (size_t i = 0; i < bgra.size(); i += 4) std::swap(bgra[i], bgra[i + 2]);
-    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
-    if (SUCCEEDED(f->CreateStream(&stream)) &&
-        SUCCEEDED(stream->InitializeFromFilename(widen(path).c_str(), GENERIC_WRITE)) &&
-        SUCCEEDED(f->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)) &&
-        SUCCEEDED(enc->Initialize(stream, WICBitmapEncoderNoCache)) &&
-        SUCCEEDED(enc->CreateNewFrame(&frame, nullptr)) && SUCCEEDED(frame->Initialize(nullptr)) &&
-        SUCCEEDED(frame->SetSize(UINT(w), UINT(h))) && SUCCEEDED(frame->SetPixelFormat(&fmt)) &&
-        IsEqualGUID(fmt, GUID_WICPixelFormat32bppBGRA) &&
-        SUCCEEDED(frame->WritePixels(UINT(h), UINT(w) * 4, UINT(bgra.size()), bgra.data())) &&
-        SUCCEEDED(frame->Commit()) && SUCCEEDED(enc->Commit())) {
-        ok = true;
-    }
-    if (frame) frame->Release();
-    if (enc) enc->Release();
-    if (stream) stream->Release();
-    return ok;
-}
 #endif
-
-std::vector<std::string> list_files(const std::string& dir, const char* pattern) {
-    std::vector<std::string> out;
-    WIN32_FIND_DATAA fd;
-    HANDLE find = FindFirstFileA((dir + "/" + pattern).c_str(), &fd);
-    if (find == INVALID_HANDLE_VALUE) return out;
-    do {
-        out.push_back(fd.cFileName);
-    } while (FindNextFileA(find, &fd));
-    FindClose(find);
-    return out;
-}
-
-void list_hashes(const std::string& dir, std::unordered_set<uint64_t>& out) {
-    for (const std::string& name : list_files(dir, "*.png")) {
-        unsigned long long hash = 0;
-        if (sscanf(name.c_str(), "%16llx", &hash) == 1) out.insert(hash);
-    }
-}

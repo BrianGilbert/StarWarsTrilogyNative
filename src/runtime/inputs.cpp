@@ -1,4 +1,5 @@
 #include "inputs.h"
+#include "env_switches.h"
 
 #include <algorithm>
 #include <chrono>
@@ -33,7 +34,7 @@ void set_player_aim(int player, float x, float y) {
     // The screen (0..1) spans the lever's whole travel (SWT_LEVER_RANGE
     // scales it: below 1 the edges of the screen are out of reach)
     static float range = [] {
-        const char* e = getenv("SWT_LEVER_RANGE");
+        const char* e = swt_env("SWT_LEVER_RANGE");
         float r = e ? float(atof(e)) : 1.0f;
         return r > 0 ? r : 1.0f;
     }();

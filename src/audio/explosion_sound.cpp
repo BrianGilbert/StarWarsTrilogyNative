@@ -48,7 +48,7 @@ bool explosion_sound_take(float& pan) {
 }
 
 bool explosion_sound_is_sample(const uint8_t* ram, uint32_t mask, uint32_t base) {
-    // FNV-1a of the first 256 bytes (LW_SNDLOG's hash column): the three
+    // FNV-1a of the first 256 bytes (SWT_SNDLOG's hash column): the three
     // explosions of Yavin (1.5, 2 and 3 s), and nothing else in a stage
     uint32_t h = 2166136261u;
     for (uint32_t i = 0; i < 256; i++) h = (h ^ ram[(base + i) & mask]) * 16777619u;

@@ -6,7 +6,6 @@
 #include <cstring>
 
 #include "sky_pack.h"
-#include "text_hd.h"
 
 namespace {
 constexpr uint32_t LINE_SCROLL = 0xF6000, MASK = 0xF7000, NAME_TABLES = 0xF8000, PALETTE = 0x100000,
@@ -110,100 +109,7 @@ inline uint32_t with_offset(uint32_t c, const int* offset) {
     return 0xFF000000u | uint32_t(r) << 16 | uint32_t(g) << 8 | uint32_t(b);
 }
 
-// Cells of the foreground drawn as high-resolution text (text_hd.h): the
-// topmost non-empty tile of each cell, when the game shows it on the 8x8 grid
-// and it is a known glyph. Returns the layer that holds it per cell (-1: none).
-void find_text(const uint8_t* vram, const TextHD& text, const uint32_t* scroll, uint32_t format,
-               const int offsets[2][3], int8_t* text_layer, uint32_t* cells) {
-    constexpr int CX = TextHD::CELLS_X, CY = TextHD::CELLS_Y;
-    memset(cells, 0, CX * CY * TextHD::CELL_TEXELS * 4);
-    // For the groups: each cell's topmost non-empty tile that is no glyph
-    // (pattern, name table entry, layer, layer pair; pattern ~0u: none)
-    struct Seen { uint32_t pattern = ~0u, e = 0; int8_t layer = -1, pair = 0; };
-    static Seen seen[CX * CY];
-    for (Seen& s : seen) s = Seen{};
-    auto colour_of = [&](uint32_t e, int pair, uint32_t nibble) {
-        return nibble ? to_bgra(le32(vram + PALETTE + ((e & 0x7FF0) | nibble) * 4), offsets[pair]) : 0u;
-    };
-    for (int cy = 0; cy < CY; cy++)
-        for (int cx = 0; cx < CX; cx++) {
-            int8_t& found = text_layer[cy * CX + cx];
-            found = -1;
-            int column = cx / 4;   // A/A' and B/B' are chosen per 32-pixel column
-            for (int pair = 0; pair < 2; pair++) {
-                // The selection must be the same on the 8 rows of the cell
-                uint32_t bit = 0;
-                bool mixed = false;
-                for (int y = 0; y < 8; y++) {
-                    uint32_t mask = le32(vram + MASK + 4 * (cy * 8 + y));
-                    uint32_t bits = pair == 0 ? (mask >> 16) : (mask & 0xFFFF);
-                    uint32_t b = (bits >> (15 - column)) & 1;
-                    if (y == 0) bit = b;
-                    else mixed |= b != bit;
-                }
-                if (mixed) break;
-                int layer = pair * 2 + (bit ? 0 : 1);
-                if (!(scroll[layer] & 0x80000000u) || !(format & (1u << (8 + layer)))) continue;
-                int xs = int(scroll[layer] & 0x3FF), ys = int((scroll[layer] >> 16) & 0x1FF);
-                bool four_bpp = format & (1u << (12 + layer));
-                if (!four_bpp || (scroll[layer] & 0x8000) || (xs & 7) || (ys & 7)) break;
-                int px = (cx * 8 + xs) & 511, py = (cy * 8 + ys) & 511;
-                uint32_t pair_word = le32(vram + NAME_TABLES + 0x2000 * layer + ((py / 8) * 32 + px / 16) * 4);
-                uint32_t e = (px & 8) ? (pair_word & 0xFFFF) : (pair_word >> 16);
-                uint32_t pattern = ((e & 0x3FFF) << 1) | (e >> 15);
-                const uint8_t* bytes = vram + (pattern * 32) % LINE_SCROLL;
-                bool blank = true;
-                for (int i = 0; i < 32 && blank; i++) blank = bytes[i] == 0;
-                if (blank) continue;   // transparent: look at the pair below
-                const TextHD::Glyph* g = text.find(pattern, vram);
-                if (!g) {
-                    seen[cy * CX + cx] = Seen{pattern, e, int8_t(layer), int8_t(pair)};
-                    break;
-                }
-                found = int8_t(layer);
-                uint32_t* c = cells + (cy * CX + cx) * TextHD::CELL_TEXELS;
-                auto colour = [&](uint32_t nibble) {
-                    return nibble ? to_bgra(le32(vram + PALETTE + ((e & 0x7FF0) | nibble) * 4), offsets[pair]) : 0u;
-                };
-                c[0] = 0xFF000000u | uint32_t(g->slot & 0xFF) << 16 | uint32_t(g->slot >> 8) << 8;
-                c[1] = colour(g->top);
-                c[2] = colour(g->bottom);
-                c[3] = colour(g->edge);
-                break;
-            }
-        }
-    // Groups: the whole block on screen, from its top left piece
-    for (const TextHD::Group& gr : text.groups)
-        for (int cy = 0; cy + gr.h <= CY; cy++)
-            for (int cx = 0; cx + gr.w <= CX; cx++) {
-                const Seen& anchor = seen[cy * CX + cx];
-                if (anchor.pattern != gr.pattern[0] || text_layer[cy * CX + cx] >= 0) continue;
-                bool match = true;
-                for (int k = 0; k < gr.w * gr.h && match; k++) {
-                    int i = (cy + k / gr.w) * CX + cx + k % gr.w;
-                    const Seen& s = seen[i];
-                    if (text_layer[i] >= 0) match = false;
-                    else if (gr.blank[k]) match = s.pattern == ~0u || s.pattern == gr.pattern[k];
-                    else match = s.pattern == gr.pattern[k] && TextHD::pattern_is(s.pattern, gr.hash[k], vram);
-                }
-                if (!match) continue;
-                for (int k = 0; k < gr.w * gr.h; k++) {
-                    int i = (cy + k / gr.w) * CX + cx + k % gr.w;
-                    text_layer[i] = anchor.layer;
-                    uint32_t* c = cells + i * TextHD::CELL_TEXELS;
-                    c[0] = 0xFF000000u | uint32_t(gr.slot[k] & 0xFF) << 16 | uint32_t(gr.slot[k] >> 8) << 8;
-                    c[1] = colour_of(anchor.e, anchor.pair, gr.top);
-                    c[2] = colour_of(anchor.e, anchor.pair, gr.bottom);
-                    c[3] = colour_of(anchor.e, anchor.pair, gr.edge);
-                }
-            }
-}
 }  // namespace
-
-void TileGen::front_offset(const uint8_t* vram, int out[3]) {
-    uint32_t o = le32(vram + REGS + 0x40);
-    for (int c = 0; c < 3; c++) out[c] = 2 * int(int8_t((o >> (8 * c)) & 0xFF));
-}
 
 void TileGen::layer_plane(const uint8_t* vram, int layer, bool four_bpp, std::vector<uint32_t>& out) {
     static const int no_offset[3] = {0, 0, 0};
@@ -248,16 +154,10 @@ uint64_t TileGen::layer_key(const uint8_t* vram, int layer, bool four_bpp) {
     return h;
 }
 
-void TileGen::compose(const uint8_t* vram, const Output& out, const TextHD* text, SkyPack* sky) {
+void TileGen::compose(const uint8_t* vram, const Output& out, SkyPack* sky) {
     uint32_t* back = out.back;
     uint32_t* front = out.front;
     uint32_t* front_raw = out.front_raw;
-    uint32_t* front_raw_top = out.front_raw_top;
-    uint32_t* front_under = out.front_under;
-    uint32_t* back_raw = out.back_raw;
-    uint32_t* back_raw_top = out.back_raw_top;
-    uint32_t* back_under = out.back_under;
-    uint32_t* text_cells = out.text_cells;
     uint32_t* sky_coords = out.sky_coords;
     int32_t* back_rows = out.back_rows;
     static const int no_offset[3] = {0, 0, 0};
@@ -289,20 +189,12 @@ void TileGen::compose(const uint8_t* vram, const Output& out, const TextHD* text
         extend[layer] = dark * 10 < total * 9;
     }
 
-    // Text drawn in high resolution is left out of the foreground image
-    int8_t text_layer[TextHD::CELLS_X * TextHD::CELLS_Y];
-    bool has_text = text && text_cells && !text->empty();
-    if (has_text) find_text(vram, *text, scroll, format, offsets, text_layer, text_cells);
-    else if (text_cells) memset(text_cells, 0, TextHD::CELLS_X * TextHD::CELLS_Y * TextHD::CELL_TEXELS * 4);
-    if (text_cells) text_cells[TextHD::CELLS_Y * TextHD::ROW_TEXELS] = 0;   // no replacement pictures yet
-
-    // Replaced backdrops (sky_pack.h)
+    // Procedural skies (sky_pack.h)
     const SkyPack::Picture* sky_picture[4] = {nullptr, nullptr, nullptr, nullptr};
     if (sky) {
         for (int layer = 0; layer < 4; layer++)
             if ((scroll[layer] & 0x80000000u) && !(format & (1u << (8 + layer))))
                 sky_picture[layer] = sky->find(vram, layer, format & (1u << (12 + layer)));
-        sky->frame_done();
     }
     if (sky_coords) {
         memset(sky_coords, 0, SKY_COORDS_W * SKY_COORDS_H * 4);
@@ -312,7 +204,7 @@ void TileGen::compose(const uint8_t* vram, const Output& out, const TextHD* text
             for (int c = 0; c < 3; c++) o |= uint32_t(offsets[pair][c] / 2 + 128) << (16 - 8 * c);
         }
         for (const SkyPack::Picture* p : sky_picture)
-            if (p && p->procedural)
+            if (p)
                 memcpy(&sky_coords[SCREEN_H * SKY_COORDS_W + 8 + (p->slot - SkyPack::FIRST_SLOT) * 2 * SkyPack::BANDS],
                        p->bands, sizeof(p->bands));
     }
@@ -320,11 +212,6 @@ void TileGen::compose(const uint8_t* vram, const Output& out, const TextHD* text
     memset(back, 0, BACK_W * SCREEN_H * 4);
     memset(front, 0, SCREEN_W * SCREEN_H * 4);
     if (front_raw) memset(front_raw, 0, SCREEN_W * SCREEN_H * 4);
-    if (front_raw_top) memset(front_raw_top, 0, SCREEN_W * SCREEN_H * 4);
-    if (back_raw) memset(back_raw, 0, SCREEN_W * SCREEN_H * 4);
-    if (back_raw_top) memset(back_raw_top, 0, SCREEN_W * SCREEN_H * 4);
-    if (back_under) memset(back_under, 0, SCREEN_W * SCREEN_H * 4);
-    if (front_under) memset(front_under, 0, SCREEN_W * SCREEN_H * 4);
     if (++g_palette_generation == 0) {   // wrapped: forget every entry
         for (PaletteCache& pc : g_palette_cache) memset(pc.stamp, 0, sizeof(pc.stamp));
         g_palette_generation = 1;
@@ -370,11 +257,6 @@ void TileGen::compose(const uint8_t* vram, const Output& out, const TextHD* text
                 if (!(scroll[layer] & 0x80000000u)) continue;
                 bool above_3d = format & (1u << (8 + layer));
                 if (!on_screen && (above_3d || !extend[layer])) continue;
-                if (!above_3d && on_screen && (back_raw || back_raw_top)) {
-                    uint32_t raw = pixel_at(layer, x, 2);
-                    if (raw && back_raw) back_raw[y * SCREEN_W + x] = raw;
-                    if (raw && back_raw_top && pair == 0) back_raw_top[y * SCREEN_W + x] = raw;
-                }
                 if (sky_picture[layer]) {
                     row_of(layer);
                     int px = (x + row_xs[layer]) & 511, py = row_py[layer];
@@ -382,30 +264,22 @@ void TileGen::compose(const uint8_t* vram, const Output& out, const TextHD* text
                     int i = y * BACK_W + x + BACK_MARGIN;
                     if (c) back[i] = with_offset(c, offsets[pair]);
                     if (c) back_layer = layer;
-                    if (c && back_under && on_screen && pair == 1) back_under[y * SCREEN_W + x] = back[i];
                     // Where this picture is transparent a replaced layer below keeps showing
                     if (sky_coords && (c || !sky_coords[i]))
                         sky_coords[i] = 0xFF000000u | uint32_t(px & 255) << 16 | uint32_t(py & 255) << 8 |
-                                        (sky_picture[layer]->slot - SkyPack::FIRST_SLOT) << 2 | uint32_t(pair) << 5 | uint32_t(sky_picture[layer]->upper) << 6 | uint32_t(sky_picture[layer]->procedural) << 7 |
+                                        (sky_picture[layer]->slot - SkyPack::FIRST_SLOT) << 2 | uint32_t(pair) << 5 | uint32_t(sky_picture[layer]->upper) << 6 |
                                         uint32_t(py >> 8) << 1 | uint32_t(px >> 8);
                     continue;
                 }
                 uint32_t c = pixel_at(layer, x, pair);
                 if (!c) continue;
                 if (above_3d) {
-                    if (!has_text || text_layer[(y / 8) * TextHD::CELLS_X + x / 8] != layer)
-                        front[y * SCREEN_W + x] = c;
-                    if (front_under && pair == 1) front_under[y * SCREEN_W + x] = c;
-                    if (front_raw || front_raw_top) {
-                        uint32_t raw = pixel_at(layer, x, 2);
-                        if (front_raw) front_raw[y * SCREEN_W + x] = raw;
-                        if (front_raw_top && pair == 0) front_raw_top[y * SCREEN_W + x] = raw;
-                    }
+                    front[y * SCREEN_W + x] = c;
+                    if (front_raw) front_raw[y * SCREEN_W + x] = pixel_at(layer, x, 2);
                 }
                 else {
                     back[y * BACK_W + x + BACK_MARGIN] = c;
                     back_layer = layer;
-                    if (back_under && on_screen && pair == 1) back_under[y * SCREEN_W + x] = c;
                     if (sky_coords) sky_coords[y * BACK_W + x + BACK_MARGIN] = 0;
                 }
             }
