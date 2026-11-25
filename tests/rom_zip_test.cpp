@@ -1,5 +1,6 @@
-// The ROM read from swtrilgy.zip (rom_zip.cpp): the chip layout against
-// tools/romtool.py's, and clear errors for a missing zip or a wrong one
+// The ROM read from swtrilgy.zip (rom_zip.cpp): how the chips interleave, and
+// clear errors for a missing zip or a wrong one (tests/rom_table_test.py checks
+// the chip table itself against tools/romtool.py's)
 #include <cstdio>
 #include <string>
 #include <vector>

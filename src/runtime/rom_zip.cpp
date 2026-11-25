@@ -21,7 +21,7 @@ struct Region {
     std::vector<Chip> chips;
 };
 
-// The same table as tools/romtool.py
+// The same table as tools/romtool.py (tests/rom_table_test.py checks it)
 const std::vector<Region>& regions() {
     static const std::vector<Region> r = {
         {&RomSet::crom, 8, 2, true,
