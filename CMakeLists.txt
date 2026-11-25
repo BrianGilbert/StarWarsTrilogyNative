@@ -298,6 +298,8 @@ add_executable(StarWarsTrilogy WIN32
     src/video/vk_presenter.cpp
     src/video/ui_overlay.cpp
     src/ui/frontend.cpp
+    src/ui/frontend_draw.cpp
+    src/ui/frontend_settings.cpp
     src/video/r3d_state.cpp
     src/video/r3d_scene.cpp
     src/video/r3d_screen.cpp
