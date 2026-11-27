@@ -91,6 +91,7 @@ constexpr float MAX_STEP = 40.0f;         // m
 constexpr float MAX_TURN = 0.5f;          // rad
 constexpr float STREAM_HZ = 57.524f;      // the Model 3 vblank (runtime.cpp FRAME_HZ): a frame is sent each
 constexpr const char* GROUP = "239.255.17.17";
+constexpr uint16_t PORT = 40123;
 constexpr double DISCOVERY_EVERY = 2.0;   // s, for late joiners
 constexpr double EVENT_CARRY = 0.1;       // s, a sent event rides along until it is this old (C-10)
 
@@ -104,19 +105,19 @@ constexpr float HIT_PER_SHIELD = 5.0f;    // added intensity per whole shield lo
 enum : uint16_t { C_PAUSED, C_SHIELD, C_SCORE };
 
 struct Craft {
-    uint16_t type;          // ObjectType: 2 aircraft, 5 humanoid
+    uint16_t type;          // ObjectType: 4 spacecraft, 5 humanoid
     const char* label;      // what it is
     const char* location;   // where
 };
 Craft craft_of(bool playing, uint32_t top, uint32_t episode) {
-    if (!playing) return {2, "", ""};
+    if (!playing) return {4, "", ""};
     if (top >= 10 && top <= 13) return {5, "Lightsaber duel", "Duel"};
     switch (episode) {
-        case 1: return {2, "X-wing", "Yavin"};
-        case 2: return {2, "Snowspeeder", "Hoth"};
-        case 3: return {2, "Speeder bike", "Endor"};
+        case 1: return {4, "X-wing", "Yavin"};
+        case 2: return {4, "Snowspeeder", "Hoth"};
+        case 3: return {4, "Speeder bike", "Endor"};
     }
-    return {2, "", ""};
+    return {4, "", ""};
 }
 
 float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -196,13 +197,12 @@ struct Publisher {
     Sock sock = NO_SOCK;
     bool wsa = false;
     sockaddr_in to{};
-    int port = 0;
     std::chrono::steady_clock::time_point t0;
     int64_t session_us = 0;
     double last_discovery = -1e9;
     uint32_t generation = 0;
     std::string label, location;   // the craft and the place: the object's identity, a change is a new generation
-    uint16_t type = 2;
+    uint16_t type = 4;
     bool announced = false;        // a discovery went out with this generation
     WireBuilder wire;
 
@@ -234,9 +234,8 @@ struct Publisher {
 
     bool ok() const { return sock != NO_SOCK; }
 
-    bool open(int p) {
-        if (ok() && port == p) return true;
-        close();
+    bool open() {
+        if (ok()) return true;
 #ifdef _WIN32
         if (!wsa) {
             WSADATA d;
@@ -258,10 +257,9 @@ struct Publisher {
         setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, reinterpret_cast<const char*>(&loop), sizeof loop);
         to = {};
         to.sin_family = AF_INET;
-        to.sin_port = htons(uint16_t(p));
+        to.sin_port = htons(PORT);
         inet_pton(AF_INET, GROUP, &to.sin_addr);
         route_by_default();
-        port = p;
         session_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         t0 = std::chrono::steady_clock::now();
         last_discovery = -1e9;
@@ -272,7 +270,7 @@ struct Publisher {
         sources[0] = sources[1] = Source{};
         pend_drop = 0;
         recent.clear();
-        printf("[telemetry] OGS-TS to %s:%d\n", GROUP, p);
+        printf("[telemetry] OGS-TS to %s:%d\n", GROUP, int(PORT));
         return true;
     }
     // Name the default route's interface for the group instead of leaving it to the OS, which moves a group to
@@ -295,7 +293,6 @@ struct Publisher {
     void close() {
         if (ok()) sock_close(sock);
         sock = NO_SOCK;
-        port = 0;
     }
     void send(const std::vector<uint8_t>& d) {
         if (g_sink) {
@@ -469,13 +466,13 @@ void telemetry_test_begin(void (*sink)(const uint8_t*, size_t)) {
     Publisher::g_sink = sink;
 }
 
-void telemetry_frame(bool on, int port) {
+void telemetry_frame(bool on) {
     Publisher& p = g_pub;
     if (!on) {
         if (p.ok()) p.close();
         return;
     }
-    if (!p.open(port > 0 && port < 65536 ? port : 40123)) return;
+    if (!p.open()) return;
 
     const double t = p.now();
     const bool playing = swt_playing();

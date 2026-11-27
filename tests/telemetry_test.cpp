@@ -82,7 +82,7 @@ static void begin() {
     set_menus();
 }
 static void frames(int n) {
-    for (int i = 0; i < n; i++) telemetry_frame(true, 40123);
+    for (int i = 0; i < n; i++) telemetry_frame(true);
 }
 
 // ---- a motion frame's pose and forces -----------------------------------------------------------------
@@ -420,8 +420,8 @@ int main() {
         set_game(1000);
         frames(2);
         size_t sent = g_sent.size();
-        telemetry_frame(false, 40123);
-        telemetry_frame(false, 40123);
+        telemetry_frame(false);
+        telemetry_frame(false);
         CHECK(g_sent.size() == sent);
     }
     telemetry_test_begin(nullptr);

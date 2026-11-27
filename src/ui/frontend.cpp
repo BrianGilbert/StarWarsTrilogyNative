@@ -173,6 +173,7 @@ const wchar_t* const Frontend::TAB_NAMES[Frontend::TAB_COUNT] = {L"EXPERIENCE", 
 // not shown. A section whose rows do not fit the page scrolls.
 const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_EXPERIENCE, EXPERIENCE_TAB, L"EDITION"}, {OPT_ARCADE_ASPECT, EXPERIENCE_TAB},
+    {OPT_TELEMETRY, EXPERIENCE_TAB, L"EXPERIMENTAL"}, {OPT_TELEMETRY_FORMAT, EXPERIENCE_TAB},
     {OPT_DISPLAY, DISPLAY_TAB, L"SCREEN"}, {OPT_RESOLUTION, DISPLAY_TAB}, {OPT_ASPECT, DISPLAY_TAB}, {OPT_SCALE, DISPLAY_TAB}, {OPT_MOTION, DISPLAY_TAB},
     {OPT_VSYNC, DISPLAY_TAB}, {OPT_MAXFPS, DISPLAY_TAB}, {OPT_BGFPS, DISPLAY_TAB}, {OPT_AA, DISPLAY_TAB},
     {OPT_SAT, DISPLAY_TAB, L"PICTURE"}, {OPT_GAMMA, DISPLAY_TAB}, {OPT_SHARPEN, DISPLAY_TAB},
@@ -187,7 +188,6 @@ const Frontend::OptionTab Frontend::OPTION_TABS[] = {
     {OPT_PAD_AIM, CONTROLS_TAB, L"GAMEPAD"}, {OPT_PAD_SPEED, CONTROLS_TAB}, {OPT_PAD_INVERT, CONTROLS_TAB}, {OPT_ASSIST, CONTROLS_TAB},
     {OPT_GYRO, CONTROLS_TAB, L"GYRO"}, {OPT_GYRO_SPEED, CONTROLS_TAB},
     {OPT_VIBRATION, CONTROLS_TAB, L"RUMBLE"}, {OPT_TRIGGERS, CONTROLS_TAB},
-    {OPT_TELEMETRY, CONTROLS_TAB, L"TELEMETRY"},
     {OPT_DUEL_INVERT, CONTROLS_TAB, L"DUELS"},
 };
 
@@ -423,9 +423,10 @@ std::vector<Frontend::Item> Frontend::items() const {
                  L"Xbox One / Series pads: the trigger kicks when you fire, the other when you reload (a share of VIBRATION)"},
                 {OPT_ASSIST, L"AIM ASSIST", BLOOM_LEVELS[settings.aim_assist],
                  L"With a gamepad the sight slows down over the enemy ships and follows them a little"},
-                {OPT_TELEMETRY, L"OPEN GAME STANDARDS TELEMETRY", on_off(settings.telemetry),
-                 L"Sends the craft's motion, the shield, the score and every hit you take (Open Game Standards Telemetry, UDP port " +
-                     std::to_wstring(settings.telemetry_port) + L") to haptics and motion rigs on this PC and your network"},
+                {OPT_TELEMETRY, L"TELEMETRY", on_off(settings.telemetry),
+                 L"Enable telemetry for use with motion simulators and haptics"},
+                {OPT_TELEMETRY_FORMAT, L"TELEMETRY FORMAT", L"OGS-TS",
+                 L"Open Game Standards Telemetry (your craft's motion, shield, score and hits) for rigs and haptics that read it, by UDP multicast on port 40123"},
                 {OPT_CONNECTED, L"CONNECTED", connected,
                  gamepads.empty() ? L"No gamepad found.  Plug one in: it shows here as soon as the game sees it"
                                   : L"Found: " + gamepads,
@@ -520,7 +521,7 @@ void Frontend::activate(const Item& it, int dir) {
     case DEBUG_STAGE: debug_stage_ = it.index; open(Screen::Debug); break;
     case DEBUG_PHASE: debug_choice = debug_stage_ * 4 + it.index; push(Action::StartDebug); break;
     case DOGFIGHT: break;   // not made yet (greyed out)
-    case TABS: case REC_ROW: case OPT_CONNECTED: break;   // nothing to change
+    case TABS: case REC_ROW: case OPT_CONNECTED: case OPT_TELEMETRY_FORMAT: break;   // nothing to change
     case BACK: back(); break;
     case RESUME: push(Action::Resume); break;
     case PAUSE_QUIT: push(Action::Quit); break;
